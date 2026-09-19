@@ -8,7 +8,7 @@ const event = (over: Partial<ApiEvent> = {}, sub: unknown = SUB) =>
 describe('userId', () => {
   it('reads the verified sub claim', () => expect(userId(event())).toBe(SUB));
   it('rejects a missing or malformed sub', () => {
-    expect(() => userId(event({}, undefined))).toThrow(HttpError);
+    expect(() => userId(event({}, null))).toThrow(HttpError);
     expect(() => userId(event({}, '../admin'))).toThrow(HttpError);
   });
 });
