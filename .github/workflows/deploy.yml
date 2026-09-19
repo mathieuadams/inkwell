@@ -1,0 +1,93 @@
+name: Deploy
+
+# main          -> dev
+# GitHub release -> prod   (protect the "prod" environment with required reviewers)
+# manual run    -> pick a stage
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      stage: ${{ steps.s.outputs.stage }}
+    steps:
+      - id: s
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then echo "stage=prod" >> "$GITHUB_OUTPUT";
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "stage=${{ inputs.stage }}" >> "$GITHUB_OUTPUT";
+          else echo "stage=dev" >> "$GITHUB_OUTPUT"; fi
+
+  deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.resolve.outputs.stage }}
+      url: ${{ steps.outputs.outputs.site_url }}
+    concurrency:
+      group: deploy-${{ needs.resolve.outputs.stage }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write   # OIDC to AWS
+      contents: read
+    env:
+      STAGE: ${{ needs.resolve.outputs.stage }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Test
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: CDK deploy
+        env:
+          CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+        run: |
+          npx cdk deploy "Inkwell-${STAGE}" \
+            -c stage="${STAGE}" \
+            -c extractModelId="${{ vars.EXTRACT_MODEL_ID }}" \
+            -c translateModelId="${{ vars.TRANSLATE_MODEL_ID }}" \
+            --require-approval never \
+            --outputs-file cdk-outputs.json
+
+      - name: Outputs
+        id: outputs
+        run: |
+          SITE=$(jq -r 'to_entries[0].value.SiteUrl' cdk-outputs.json)
+          echo "site_url=$SITE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Inkwell ${STAGE} deployed"
+            echo ""
+            echo "| Output | Value |"
+            echo "|---|---|"
+            jq -r 'to_entries[0].value | to_entries[] | "| \(.key) | \(.value) |"' cdk-outputs.json
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,34 @@
+{
+  "name": "inkwell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Handwritten notes to editable, translatable text. Serverless on AWS (CloudFront, S3, Cognito, API Gateway, Lambda, Bedrock).",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "synth": "cdk synth -c stage=dev",
+    "deploy:dev": "cdk deploy Inkwell-dev -c stage=dev",
+    "deploy:prod": "cdk deploy Inkwell-prod -c stage=prod",
+    "web:config": "node scripts/pull-config.mjs",
+    "web:dev": "serve -s web -l 5173"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.800.0",
+    "@aws-sdk/client-s3": "^3.800.0",
+    "@aws-sdk/s3-request-presigner": "^3.800.0",
+    "aws-cdk-lib": "^2.200.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.800.0",
+    "@types/aws-lambda": "^8.10.149",
+    "@types/node": "^22.15.0",
+    "aws-cdk": "^2.1020.0",
+    "esbuild": "^0.25.0",
+    "serve": "^14.2.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
