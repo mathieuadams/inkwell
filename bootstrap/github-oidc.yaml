@@ -45,9 +45,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub:
-                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:environment:dev
-                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:environment:prod
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOwner}/${GitHubRepo}:*
       Policies:
         - PolicyName: assume-cdk-bootstrap-roles
           PolicyDocument:
@@ -64,3 +62,4 @@ Outputs:
   DeployRoleArn:
     Description: Set this as the AWS_DEPLOY_ROLE_ARN repository variable in GitHub
     Value: !GetAtt DeployRole.Arn
+
