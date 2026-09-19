@@ -6,16 +6,17 @@ Description: >
 Parameters:
   GitHubOwner:
     Type: String
-    Description: GitHub user or organization that owns the repository
   GitHubRepo:
     Type: String
     Default: inkwell
-    Description: Repository name
+  GitHubOwnerId:
+    Type: String
+  GitHubRepoId:
+    Type: String
   CreateOidcProvider:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-    Description: Set to false if this account already has the token.actions.githubusercontent.com provider
 
 Conditions:
   MakeProvider: !Equals [!Ref CreateOidcProvider, 'true']
@@ -45,7 +46,9 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOwner}/${GitHubRepo}:*
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:*
+                  - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:*
       Policies:
         - PolicyName: assume-cdk-bootstrap-roles
           PolicyDocument:
@@ -60,6 +63,4 @@ Resources:
 
 Outputs:
   DeployRoleArn:
-    Description: Set this as the AWS_DEPLOY_ROLE_ARN repository variable in GitHub
     Value: !GetAtt DeployRole.Arn
-
