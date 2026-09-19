@@ -11,6 +11,8 @@ beforeAll(() => {
     stage: 'test',
     extractModelId: 'test-extract-model',
     translateModelId: 'test-translate-model',
+    stripePrices: { starter: 'price_s', plus: 'price_p', pro: 'price_x' },
+    freePages: '3',
     env: { account: '123456789012', region: 'us-east-1' },
   });
   t = Template.fromStack(stack);
@@ -35,11 +37,26 @@ describe('InkwellStack', () => {
     });
   });
 
-  it('protects every API route with the Cognito JWT authorizer', () => {
+  it('protects every API route with the Cognito JWT authorizer except the Stripe webhook', () => {
     const routes = Object.values(t.findResources('AWS::ApiGatewayV2::Route'));
-    expect(routes).toHaveLength(7);
-    for (const r of routes) expect(r.Properties.AuthorizationType).toBe('JWT');
+    expect(routes).toHaveLength(11);
+    for (const r of routes) {
+      const expected = r.Properties.RouteKey === 'POST /stripe/webhook' ? 'NONE' : 'JWT';
+      expect(r.Properties.AuthorizationType ?? 'NONE').toBe(expected);
+    }
     t.resourceCountIs('AWS::ApiGatewayV2::Authorizer', 1);
+  });
+
+  it('only lets billing Lambdas read the Stripe parameters', () => {
+    const policies = Object.values(t.findResources('AWS::IAM::Policy')).filter((p) =>
+      JSON.stringify(p.Properties.PolicyDocument).includes('ssm:GetParameter'),
+    );
+    expect(policies).toHaveLength(2);
+    expect(JSON.stringify(policies)).toContain('/inkwell/test/stripe/*');
+  });
+
+  it('schedules the daily retention cleanup', () => {
+    t.hasResourceProperties('AWS::Events::Rule', { ScheduleExpression: 'cron(17 9 * * ? *)' });
   });
 
   it('runs the app Lambdas on Node 22 / arm64 with the configured models', () => {

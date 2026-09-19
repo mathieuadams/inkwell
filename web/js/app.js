@@ -23,9 +23,16 @@ const SAMPLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="840" height="
     <text x="66" y="350" font-size="24" font-weight="600">Don't forget: water the plants!</text>
   </g></svg>`;
 
+const PLANS = [
+  { id: 'starter', name: 'Starter', price: 5, pages: 20, perks: ['20 pages a month', 'Translate into any language', 'Copy or download text', 'Notes are not saved'] },
+  { id: 'plus', name: 'Plus', price: 10, pages: 150, featured: true, perks: ['150 pages a month', 'Translate into any language', 'Notes and photos kept 30 days', 'Access from any device'] },
+  { id: 'pro', name: 'Pro', price: 25, pages: 500, perks: ['500 pages a month', 'Translate into any language', 'Notes kept while subscribed', 'Build a searchable archive'] },
+];
+const PLAN_NAMES = { free: 'Free', starter: 'Starter', plus: 'Plus', pro: 'Pro' };
+
 let auth;
 let api;
-const state = { note: null, lang: 'French', lastBlob: null, saveTimer: null, previewUrl: null, busy: false };
+const state = { note: null, lang: 'French', lastBlob: null, saveTimer: null, previewUrl: null, busy: false, account: null };
 
 bindUi();
 renderLangs();
@@ -48,14 +55,121 @@ async function boot() {
   auth = createAuth(cfg);
   api = createApi(cfg, auth);
 
+  const billingReturn = new URLSearchParams(location.search).get('billing');
   try {
     await auth.handleRedirect();
   } catch (e) {
     toast(e.message);
   }
+  if (billingReturn) history.replaceState(null, '', '/');
   await auth.accessToken();
   renderAccount();
-  if (auth.isSignedIn()) refreshRecent();
+  if (!auth.isSignedIn()) return;
+
+  await refreshAccount();
+  refreshRecent();
+  if (billingReturn === 'success') waitForSubscription();
+  if (billingReturn === 'cancel') toast('Checkout cancelled. You have not been charged.');
+}
+
+/* ------------------------------------------------------------------ plans & billing */
+
+async function refreshAccount() {
+  try {
+    state.account = await api.account();
+    renderUsage();
+  } catch (e) {
+    if (e.status !== 401) console.warn('Account unavailable', e);
+  }
+  return state.account;
+}
+
+function setAccount(account) {
+  if (!account) return;
+  state.account = account;
+  renderUsage();
+}
+
+function renderUsage() {
+  const a = state.account;
+  $('usageBtn').hidden = !a;
+  if (!a) return;
+  $('usagePlan').textContent = PLAN_NAMES[a.plan] || a.plan;
+  $('usageText').textContent = a.plan === 'free'
+    ? `${Math.max(0, a.pagesLimit - a.pagesUsed)} free ${a.pagesLimit - a.pagesUsed === 1 ? 'page' : 'pages'} left`
+    : `${a.pagesUsed} / ${a.pagesLimit} pages`;
+  $('usageBtn').classList.toggle('low', a.pagesUsed >= a.pagesLimit);
+  $('storageHint').hidden = a.storesNotes;
+}
+
+/** Stripe's webhook can land a few seconds after the redirect back. */
+async function waitForSubscription() {
+  toast('Payment received. Activating your plan…');
+  for (let i = 0; i < 8; i++) {
+    const a = await refreshAccount();
+    if (a?.hasSubscription) {
+      toast(`${PLAN_NAMES[a.plan]} is active. ${a.pagesLimit} pages this month.`);
+      refreshRecent();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  toast('Your plan will show up in a moment. Refresh the page if it doesn’t.');
+}
+
+function openPlans(message) {
+  const a = state.account;
+  $('plansMsg').hidden = !message;
+  $('plansMsg').textContent = message || '';
+  $('plansTitle').textContent = a?.hasSubscription ? 'Your plan' : 'Choose a plan';
+  const grid = $('planGrid');
+  grid.replaceChildren();
+  for (const p of PLANS) {
+    const current = a?.hasSubscription && a.plan === p.id;
+    const card = document.createElement('div');
+    card.className = `plan-card${p.featured ? ' featured' : ''}${current ? ' current' : ''}`;
+    card.innerHTML = `<div class="plan-name"></div><div class="plan-price">$${p.price}<small> / month</small></div><ul></ul>`;
+    const name = card.querySelector('.plan-name');
+    name.textContent = p.name;
+    if (p.featured) name.insertAdjacentHTML('beforeend', '<span class="plan-badge">Popular</span>');
+    const ul = card.querySelector('ul');
+    for (const perk of p.perks) {
+      const li = document.createElement('li');
+      li.textContent = perk;
+      ul.append(li);
+    }
+    const btn = document.createElement('button');
+    btn.className = `btn ${p.featured || current ? 'btn-primary' : ''}`;
+    btn.textContent = current ? 'Manage plan' : a?.hasSubscription ? `Switch to ${p.name}` : `Choose ${p.name}`;
+    btn.onclick = () => (a?.hasSubscription ? goToPortal(btn) : goToCheckout(p.id, btn));
+    card.append(btn);
+    grid.append(card);
+  }
+  if (!$('plansDialog').open) $('plansDialog').showModal();
+}
+
+async function goToCheckout(plan, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Opening checkout…';
+  try {
+    const { url } = await api.checkout(plan);
+    location.assign(url);
+  } catch (e) {
+    toast(e.message);
+    btn.disabled = false;
+    btn.textContent = 'Try again';
+  }
+}
+
+async function goToPortal(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+  try {
+    const { url } = await api.portal();
+    location.assign(url);
+  } catch (e) {
+    toast(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
+  }
 }
 
 function renderAccount() {
@@ -77,6 +191,14 @@ function bindUi() {
   $('signInTop').onclick = () => auth?.signIn();
   $('signUpBtn').onclick = () => auth?.signUp();
   $('signOutBtn').onclick = () => auth?.signOut();
+  $('billingBtn').onclick = () => { $('account').open = false; state.account?.hasSubscription ? goToPortal() : openPlans(); };
+  $('usageBtn').onclick = () => openPlans();
+  $('storageUpgradeBtn').onclick = () => openPlans();
+  $('plansClose').onclick = () => $('plansDialog').close();
+  $('plansDialog').addEventListener('click', (e) => { if (e.target === $('plansDialog')) $('plansDialog').close(); });
+  window.addEventListener('beforeunload', (e) => {
+    if (state.note && state.note.saved === false) e.preventDefault();
+  });
 
   $('homeLink').onclick = (e) => { e.preventDefault(); showCapture(); };
   $('backBtn').onclick = showCapture;
@@ -117,6 +239,7 @@ function initTheme() {
 /* ------------------------------------------------------------------ views */
 
 function showCapture() {
+  if (state.note && state.note.saved === false && !confirm('This note isn’t saved on your plan. Leave it?')) return;
   flushSave();
   $('workspace').hidden = true;
   $('capture').hidden = false;
@@ -227,9 +350,12 @@ async function runExtraction(blob) {
     setStatus('busy', 'Reading your handwriting…');
     const note = await api.extract(key);
     loadNote(note);
-    setStatus('done', 'Done. Check the text and fix anything that looks off.');
+    setStatus('done', note.saved
+      ? 'Done. Check the text and fix anything that looks off.'
+      : 'Done. Your plan doesn’t save notes, so copy or download what you need.');
   } catch (e) {
-    setStatus('err', e.message, { retry: e.status !== 401 && e.status !== 413 && e.status !== 415 });
+    setStatus('err', e.message, { retry: ![401, 402, 413, 415].includes(e.status) });
+    if (e.status === 402) openPlans(e.message);
   } finally {
     setBusy(false);
   }
@@ -237,7 +363,10 @@ async function runExtraction(blob) {
 
 function loadNote(note) {
   note.translations ??= {};
+  note.saved ??= true;
+  setAccount(note.account);
   state.note = note;
+  $('deleteBtn').hidden = !note.saved;
   $('noteTitle').textContent = note.title;
   $('editor').value = note.text;
   showSkeleton(false);
@@ -269,6 +398,7 @@ function onEdit() {
   if (!state.note) return;
   if (Object.keys(state.note.translations).length) state.note.translations = {};
   resetTranslation();
+  if (!state.note.saved) return;
   setStatus('', 'Unsaved changes');
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(saveText, 1200);
@@ -368,16 +498,18 @@ async function translate() {
   $('output').className = 'output';
   $('output').innerHTML = '<div class="skeleton bare"><i style="width:45%"></i><i style="width:85%"></i><i style="width:70%"></i><i style="width:90%"></i></div>';
   try {
-    const res = await api.translate(text, lang, note?.id);
+    const res = await api.translate(text, lang, note?.saved ? note.id : undefined);
+    setAccount(res.account);
     if (note) {
       if (note.text !== text) { note.text = text; note.translations = {}; }
       note.translations[lang] = { text: res.text };
-      setStatus('done', 'Saved');
+      if (note.saved) setStatus('done', 'Saved');
     }
     if (state.note === note && state.lang === lang) showTranslation(res.text);
   } catch (e) {
     $('output').className = 'output empty error';
     $('output').textContent = e.message;
+    if (e.status === 402) openPlans(e.message);
   } finally {
     $('translateBtn').disabled = !state.note;
   }
@@ -397,7 +529,7 @@ async function refreshRecent() {
 function renderRecent(notes) {
   const list = $('recentList');
   list.replaceChildren();
-  $('recentEmpty').hidden = notes.length > 0;
+  $('recentEmpty').hidden = notes.length > 0 || state.account?.storesNotes === false;
   for (const n of notes) {
     const li = document.createElement('li');
     const btn = document.createElement('button');

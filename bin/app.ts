@@ -13,6 +13,12 @@ new InkwellStack(app, `Inkwell-${stage}`, {
   stage,
   extractModelId: app.node.tryGetContext('extractModelId') || DEFAULT_EXTRACT_MODEL,
   translateModelId: app.node.tryGetContext('translateModelId') || DEFAULT_TRANSLATE_MODEL,
+  stripePrices: {
+    starter: app.node.tryGetContext('stripePriceStarter') || '',
+    plus: app.node.tryGetContext('stripePricePlus') || '',
+    pro: app.node.tryGetContext('stripePricePro') || '',
+  },
+  freePages: String(app.node.tryGetContext('freePages') || '3'),
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',

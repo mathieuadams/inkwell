@@ -69,7 +69,8 @@ aws cloudformation deploy \
   --stack-name inkwell-github-oidc \
   --template-file bootstrap/github-oidc.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides GitHubOwner=<you> GitHubRepo=inkwell
+  --parameter-overrides GitHubOwner=<you> GitHubRepo=inkwell \
+    GitHubOwnerId=$(gh api users/<you> --jq .id) GitHubRepoId=$(gh api repos/<you>/inkwell --jq .id)
 # If the account already has the GitHub OIDC provider, add CreateOidcProvider=false
 
 aws cloudformation describe-stacks --stack-name inkwell-github-oidc \
@@ -89,6 +90,28 @@ aws cloudformation describe-stacks --stack-name inkwell-github-oidc \
 Re-run the *Deploy* workflow (Actions → Deploy → Run workflow → dev), or push to `main`. The run summary lists the site URL. Open it, choose *Create account*, verify your email, add a note.
 
 Prod: publish a GitHub release (e.g. `v1.0.0`). It waits for approval, then deploys `Inkwell-prod`.
+
+## Plans and billing (Stripe)
+
+| Plan | Price | Pages / month | Notes kept |
+|---|---|---|---|
+| Free | $0 | `FREE_PAGES` total (default 3) | Not saved |
+| Starter | $5 | 20 | Not saved (photo deleted after reading) |
+| Plus | $10 | 150 | 30 days |
+| Pro | $25 | 500 | While subscribed |
+
+Translations are capped at 5× the page quota. After a downgrade or cancellation, stored notes are kept 30 days before the new plan's retention applies (daily cleanup Lambda).
+
+Setup per stage (dev uses Stripe **test mode**, prod uses **live mode**):
+
+1. Stripe products with monthly prices, then GitHub variables `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PLUS`, `STRIPE_PRICE_PRO` (`price_...`). Optional `FREE_PAGES`.
+2. Restricted key (Checkout Sessions W, Customers W, Customer portal W, Subscriptions R, Prices R, Products R) in SSM:
+   `aws ssm put-parameter --name /inkwell/dev/stripe/secret-key --type SecureString --value rk_test_...`
+3. Deploy, then add a Stripe webhook to the `StripeWebhookUrl` output with events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, and store its signing secret:
+   `aws ssm put-parameter --name /inkwell/dev/stripe/webhook-secret --type SecureString --value whsec_...`
+4. Stripe customer portal: enable plan switching (all three products) and cancellation.
+
+Prod uses the same parameter names under `/inkwell/prod/stripe/`. Separate GitHub environment variables can hold the live price IDs.
 
 ## CI/CD
 

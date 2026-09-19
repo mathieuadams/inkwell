@@ -13,6 +13,8 @@ import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 
 export interface InkwellStackProps extends cdk.StackProps {
   /** dev | prod | any short name. prod retains data on stack deletion. */
@@ -21,6 +23,10 @@ export interface InkwellStackProps extends cdk.StackProps {
   extractModelId: string;
   /** Bedrock model or inference-profile id used to translate. */
   translateModelId: string;
+  /** Stripe price ids (price_...) for the monthly plans. Empty = billing disabled. */
+  stripePrices: { starter: string; plus: string; pro: string };
+  /** Pages a new account can convert before subscribing. */
+  freePages: string;
 }
 
 const LOCAL_ORIGIN = 'http://localhost:5173';
@@ -164,6 +170,11 @@ export class InkwellStack extends cdk.Stack {
     /* ------------------------------------------------------------------ */
     /* Lambdas                                                             */
     /* ------------------------------------------------------------------ */
+    // Stripe keys live in SSM Parameter Store (SecureString), never in the repo:
+    //   /inkwell/{stage}/stripe/secret-key      restricted API key
+    //   /inkwell/{stage}/stripe/webhook-secret  webhook signing secret
+    const stripeParamPrefix = `/inkwell/${props.stage}/stripe`;
+
     const fn = (name: string, file: string, overrides: Partial<NodejsFunctionProps> = {}) =>
       new NodejsFunction(this, name, {
         entry: path.join(ROOT, 'backend', 'src', 'handlers', file),
@@ -176,6 +187,13 @@ export class InkwellStack extends cdk.Stack {
           BUCKET: dataBucket.bucketName,
           EXTRACT_MODEL_ID: props.extractModelId,
           TRANSLATE_MODEL_ID: props.translateModelId,
+          SITE_URL: siteUrl,
+          FREE_PAGES: props.freePages,
+          STRIPE_PRICE_STARTER: props.stripePrices.starter,
+          STRIPE_PRICE_PLUS: props.stripePrices.plus,
+          STRIPE_PRICE_PRO: props.stripePrices.pro,
+          STRIPE_SECRET_PARAM: `${stripeParamPrefix}/secret-key`,
+          STRIPE_WEBHOOK_PARAM: `${stripeParamPrefix}/webhook-secret`,
           NODE_OPTIONS: '--enable-source-maps',
         },
         bundling: {
@@ -195,12 +213,33 @@ export class InkwellStack extends cdk.Stack {
     const extractFn = fn('ExtractFn', 'extract.ts', { memorySize: 1024 });
     const translateFn = fn('TranslateFn', 'translate.ts');
     const notesFn = fn('NotesFn', 'notes.ts', { memorySize: 256 });
+    const billingFn = fn('BillingFn', 'billing.ts', { memorySize: 256 });
+    const webhookFn = fn('StripeWebhookFn', 'webhook.ts', { memorySize: 256 });
+    const cleanupFn = fn('CleanupFn', 'cleanup.ts', { timeout: cdk.Duration.minutes(15) });
 
     dataBucket.grantPut(uploadFn);
     dataBucket.grantReadWrite(extractFn);
     dataBucket.grantReadWrite(translateFn);
     dataBucket.grantReadWrite(notesFn);
     dataBucket.grantDelete(notesFn);
+    dataBucket.grantRead(uploadFn);
+    dataBucket.grantReadWrite(billingFn);
+    dataBucket.grantReadWrite(webhookFn);
+    dataBucket.grantReadWrite(cleanupFn);
+    dataBucket.grantDelete(cleanupFn);
+
+    const readStripeSecrets = new iam.PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${stripeParamPrefix}/*`],
+    });
+    billingFn.addToRolePolicy(readStripeSecrets);
+    webhookFn.addToRolePolicy(readStripeSecrets);
+
+    new events.Rule(this, 'DailyCleanup', {
+      description: `Inkwell ${props.stage}: apply note retention per plan`,
+      schedule: events.Schedule.cron({ minute: '17', hour: '9' }),
+      targets: [new targets.LambdaFunction(cleanupFn)],
+    });
 
     const bedrockInvoke = new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
@@ -256,6 +295,18 @@ export class InkwellStack extends cdk.Stack {
     api.addRoutes({ path: '/notes', methods: [M.GET], integration: notesIntegration });
     api.addRoutes({ path: '/notes/{id}', methods: [M.GET, M.PATCH, M.DELETE], integration: notesIntegration });
 
+    const billingIntegration = new HttpLambdaIntegration('BillingIntegration', billingFn);
+    api.addRoutes({ path: '/account', methods: [M.GET], integration: billingIntegration });
+    api.addRoutes({ path: '/billing/checkout', methods: [M.POST], integration: billingIntegration });
+    api.addRoutes({ path: '/billing/portal', methods: [M.POST], integration: billingIntegration });
+    // Stripe can't send a Cognito JWT; the handler verifies the Stripe-Signature header instead.
+    api.addRoutes({
+      path: '/stripe/webhook',
+      methods: [M.POST],
+      integration: new HttpLambdaIntegration('StripeWebhookIntegration', webhookFn),
+      authorizer: new apigw.HttpNoneAuthorizer(),
+    });
+
     /* ------------------------------------------------------------------ */
     /* Publish the front end + runtime config                              */
     /* ------------------------------------------------------------------ */
@@ -291,5 +342,7 @@ export class InkwellStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AuthDomain', { value: authDomain.baseUrl() });
     new cdk.CfnOutput(this, 'DataBucketName', { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, 'DistributionId', { value: distribution.distributionId });
+    new cdk.CfnOutput(this, 'StripeWebhookUrl', { value: `${api.apiEndpoint}/stripe/webhook` });
+    new cdk.CfnOutput(this, 'StripeParamPrefix', { value: stripeParamPrefix });
   }
 }

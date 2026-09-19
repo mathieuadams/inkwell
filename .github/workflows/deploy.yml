@@ -76,6 +76,10 @@ jobs:
             -c stage="${STAGE}" \
             -c extractModelId="${{ vars.EXTRACT_MODEL_ID }}" \
             -c translateModelId="${{ vars.TRANSLATE_MODEL_ID }}" \
+            -c stripePriceStarter="${{ vars.STRIPE_PRICE_STARTER }}" \
+            -c stripePricePlus="${{ vars.STRIPE_PRICE_PLUS }}" \
+            -c stripePricePro="${{ vars.STRIPE_PRICE_PRO }}" \
+            -c freePages="${{ vars.FREE_PAGES }}" \
             --require-approval never \
             --outputs-file cdk-outputs.json
 

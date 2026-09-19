@@ -26,11 +26,13 @@
     <button class="icon-btn" id="themeBtn" aria-label="Switch between light and dark theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
     </button>
+    <button class="usage-chip" id="usageBtn" hidden aria-label="Your plan and usage"><span id="usagePlan"></span><span id="usageText"></span></button>
     <button class="btn btn-sm" id="signInTop" hidden>Sign in</button>
     <details class="account" id="account" hidden>
       <summary class="avatar" id="avatar" aria-label="Account">?</summary>
       <div class="menu">
         <div class="menu-email" id="userEmail"></div>
+        <button class="btn btn-sm" id="billingBtn">Plans &amp; billing</button>
         <button class="btn btn-sm" id="signOutBtn">Sign out</button>
       </div>
     </details>
@@ -84,6 +86,10 @@
       <h3>Recent notes</h3>
       <ul class="recent-list" id="recentList"></ul>
       <p class="recent-empty" id="recentEmpty" hidden>Notes you add show up here.</p>
+      <div class="storage-hint" id="storageHint" hidden>
+        <p>Your plan doesn't keep notes. Plus keeps them for 30 days, Pro for as long as you're subscribed.</p>
+        <button class="btn btn-sm" id="storageUpgradeBtn">See plans</button>
+      </div>
     </div>
   </section>
 
@@ -162,6 +168,18 @@
     </div>
   </section>
 </main>
+
+<dialog class="plans" id="plansDialog" aria-labelledby="plansTitle">
+  <div class="plans-head">
+    <h2 id="plansTitle">Choose a plan</h2>
+    <button class="icon-btn" id="plansClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <p class="plans-msg" id="plansMsg" hidden></p>
+  <div class="plan-grid" id="planGrid"></div>
+  <p class="hint plans-foot">Billed monthly. Change or cancel anytime. Page counts reset each billing month.</p>
+</dialog>
 
 <div class="toast" id="toast" role="status"></div>
 </body>

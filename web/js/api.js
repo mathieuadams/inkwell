@@ -6,6 +6,7 @@ export class ApiError extends Error {
 }
 
 const FALLBACK = {
+  402: 'You have reached your plan limit.',
   413: 'That file is too large.',
   429: 'Too many requests right now. Wait a moment and try again.',
   503: 'Reading took too long. Try again, or use a smaller photo.',
@@ -63,5 +64,8 @@ export function createApi(cfg, auth) {
     getNote: (id) => request('GET', `/notes/${encodeURIComponent(id)}`),
     updateNote: (id, patch) => request('PATCH', `/notes/${encodeURIComponent(id)}`, patch),
     deleteNote: (id) => request('DELETE', `/notes/${encodeURIComponent(id)}`),
+    account: () => request('GET', '/account'),
+    checkout: (plan) => request('POST', '/billing/checkout', { plan }),
+    portal: () => request('POST', '/billing/portal'),
   };
 }

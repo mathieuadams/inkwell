@@ -6,17 +6,22 @@ Description: >
 Parameters:
   GitHubOwner:
     Type: String
+    Description: GitHub user or organization that owns the repository
   GitHubRepo:
     Type: String
     Default: inkwell
+    Description: Repository name
   GitHubOwnerId:
     Type: String
+    Description: Numeric id of the owner (gh api users/<owner> --jq .id). GitHub now puts it in the OIDC subject.
   GitHubRepoId:
     Type: String
+    Description: Numeric id of the repository (gh api repos/<owner>/<repo> --jq .id)
   CreateOidcProvider:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
+    Description: Set to false if this account already has the token.actions.githubusercontent.com provider
 
 Conditions:
   MakeProvider: !Equals [!Ref CreateOidcProvider, 'true']
@@ -63,4 +68,5 @@ Resources:
 
 Outputs:
   DeployRoleArn:
+    Description: Set this as the AWS_DEPLOY_ROLE_ARN repository variable in GitHub
     Value: !GetAtt DeployRole.Arn

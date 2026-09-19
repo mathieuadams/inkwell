@@ -1,8 +1,10 @@
-/** POST /extract  { key } -> Note   (reads the upload with Bedrock and saves a note) */
+/** POST /extract  { key } -> Note & { saved, account }  (reads the upload with Bedrock; saves it if the plan keeps notes) */
 import { randomUUID } from 'crypto';
-import { GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { s3, bucket, saveNote, type Note } from '../lib/storage';
+import { getBilling, getUsage, saveUsage } from '../lib/account';
+import { checkAllowance, recordUsage, storesNotes, summary } from '../lib/plans';
 import { transcribe } from '../lib/bedrock';
 import { assertOwnedUpload, formatFor, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '../lib/validation';
 
@@ -10,6 +12,10 @@ export const handler = handle(async (event) => {
   const sub = userId(event);
   const { key } = parseBody<{ key: string }>(event);
   assertOwnedUpload(sub, key);
+
+  const [billing, usage] = await Promise.all([getBilling(sub), getUsage(sub)]);
+  const blocked = checkAllowance(billing, usage, 'page');
+  if (blocked) throw new HttpError(402, blocked);
 
   let obj: GetObjectCommandOutput;
   try {
@@ -27,7 +33,7 @@ export const handler = handle(async (event) => {
   const bytes = await obj.Body!.transformToByteArray();
   const result = await transcribe(bytes, format);
   if (!result.legible || !result.text) {
-    throw new HttpError(422, "No readable handwriting found. Try a sharper photo in good light, taken straight on.");
+    throw new HttpError(422, 'No readable handwriting found. Try a sharper photo in good light, taken straight on.');
   }
 
   const now = new Date().toISOString();
@@ -42,6 +48,15 @@ export const handler = handle(async (event) => {
     updatedAt: now,
     translations: {},
   };
-  await saveNote(sub, note);
-  return json(201, note);
+
+  const saved = storesNotes(billing);
+  const nextUsage = recordUsage(billing, usage, 'page');
+  await Promise.all([
+    saveUsage(sub, nextUsage),
+    saved
+      ? saveNote(sub, note)
+      : s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key })).catch((e) => console.warn('Upload delete failed', e)),
+  ]);
+
+  return json(201, { ...note, saved, account: summary(billing, nextUsage) });
 });
