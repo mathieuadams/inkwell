@@ -353,9 +353,11 @@ function showSkeleton(on) {
 function setBusy(on) {
   state.busy = on;
   $('pageFrame').classList.toggle('scanning', on);
-  for (const id of ['copyBtn', 'downloadBtn', 'toTrBtn', 'deleteBtn', 'translateBtn']) {
+  for (const id of ['copyBtn', 'downloadBtn', 'toTrBtn', 'deleteBtn']) {
     $(id).disabled = on || !state.note;
   }
+  // Translate only needs text in the editor, so it's never tied to note state.
+  $('translateBtn').disabled = on;
 }
 
 function setStatus(kind, text, { retry = false } = {}) {
@@ -447,6 +449,7 @@ function loadNote(note) {
   showSkeleton(false);
   updateCount();
   showCachedTranslation();
+  setBusy(state.busy); // enable Copy / Download / Translate now that a note is loaded
 }
 
 async function openNote(id) {
@@ -589,7 +592,7 @@ async function translate() {
     $('output').textContent = e.message;
     if (e.status === 402) openPlans(e.message);
   } finally {
-    $('translateBtn').disabled = !state.note;
+    $('translateBtn').disabled = false;
   }
 }
 
