@@ -10,17 +10,20 @@ const LANGS = [
 ];
 
 const SAMPLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="840" height="1080" viewBox="0 0 420 540">
-  <defs><pattern id="rule" width="420" height="38" patternUnits="userSpaceOnUse" y="96"><line x1="0" y1="37.5" x2="420" y2="37.5" stroke="#C9D6EA" stroke-width="1.2"/></pattern></defs>
-  <rect width="420" height="540" fill="#FFFEF7"/><rect width="420" height="540" fill="url(#rule)"/>
-  <line x1="52" y1="0" x2="52" y2="540" stroke="#F2A7A7" stroke-width="1.4"/>
-  <g font-family="'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive" fill="#1F3A93" transform="rotate(-1.2 210 270)">
-    <text x="66" y="80" font-size="34" font-weight="600">Weekend plans</text>
-    <path d="M66 90 q70 6 190 -2" stroke="#1F3A93" stroke-width="2" fill="none"/>
-    <text x="66" y="160" font-size="22">Farmers market at 9 - bring bags</text>
-    <text x="66" y="198" font-size="22">Call Mom about Sunday lunch</text>
-    <text x="66" y="236" font-size="22">Fix the bike tire</text>
-    <text x="66" y="274" font-size="22">Book dentist for next week</text>
-    <text x="66" y="350" font-size="24" font-weight="600">Don't forget: water the plants!</text>
+  <defs><pattern id="rule" width="420" height="34" patternUnits="userSpaceOnUse" y="70"><line x1="0" y1="33.5" x2="420" y2="33.5" stroke="#CFC2A6" stroke-width="1.1"/></pattern></defs>
+  <rect width="420" height="540" fill="#FBF3E2"/><rect width="420" height="540" fill="url(#rule)"/>
+  <line x1="46" y1="0" x2="46" y2="540" stroke="#E0B7A8" stroke-width="1.2"/>
+  <g font-family="'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive" fill="#2C3E7B" transform="rotate(-1.4 210 270)">
+    <text x="60" y="62" font-size="26">Liebe Constanze!</text>
+    <text x="60" y="118" font-size="19">Damit Du wieder einmal Post</text>
+    <text x="60" y="152" font-size="19">aus Deutschland bekommst,</text>
+    <text x="60" y="186" font-size="19">schicke ich Dir diese Karte.</text>
+    <text x="60" y="254" font-size="19">Wie geht es Dir denn so?</text>
+    <text x="60" y="288" font-size="19">Musst Du viel lernen?</text>
+    <text x="60" y="356" font-size="19">Ich komme im Dezember</text>
+    <text x="60" y="390" font-size="19">nach England. Bist Du da</text>
+    <text x="60" y="424" font-size="19">schon zu Hause?</text>
+    <text x="60" y="470" font-size="20">Ich wuerde mich sehr freuen!</text>
   </g></svg>`;
 
 const PLANS = [
@@ -178,6 +181,37 @@ async function buyTopup(pages, btn) {
   }
 }
 
+function planCard(p, { current = false, label, onClick }) {
+  const card = document.createElement('div');
+  card.className = `plan-card${p.featured ? ' featured' : ''}${current ? ' current' : ''}`;
+  card.innerHTML = `<div class="plan-name"></div><div class="plan-price">$${p.price}<small> / month</small></div><ul></ul>`;
+  const name = card.querySelector('.plan-name');
+  name.textContent = p.name;
+  if (p.featured) name.insertAdjacentHTML('beforeend', '<span class="plan-badge">Popular</span>');
+  const ul = card.querySelector('ul');
+  for (const perk of p.perks) {
+    const li = document.createElement('li');
+    li.textContent = perk;
+    ul.append(li);
+  }
+  const btn = document.createElement('button');
+  btn.className = `btn ${p.featured || current ? 'btn-primary' : ''}`;
+  btn.textContent = label;
+  btn.onclick = () => onClick(btn);
+  card.append(btn);
+  return card;
+}
+
+/** Pricing on the signed-out landing page: every button starts sign-up. */
+function renderLandingPlans() {
+  const grid = $('landingPlans');
+  if (!grid) return;
+  grid.replaceChildren();
+  for (const p of PLANS) {
+    grid.append(planCard(p, { label: `Start with ${p.name}`, onClick: () => auth?.signUp() }));
+  }
+}
+
 function openPlans(message) {
   const a = state.account;
   $('plansMsg').hidden = !message;
@@ -187,24 +221,11 @@ function openPlans(message) {
   grid.replaceChildren();
   for (const p of PLANS) {
     const current = a?.hasSubscription && a.plan === p.id;
-    const card = document.createElement('div');
-    card.className = `plan-card${p.featured ? ' featured' : ''}${current ? ' current' : ''}`;
-    card.innerHTML = `<div class="plan-name"></div><div class="plan-price">$${p.price}<small> / month</small></div><ul></ul>`;
-    const name = card.querySelector('.plan-name');
-    name.textContent = p.name;
-    if (p.featured) name.insertAdjacentHTML('beforeend', '<span class="plan-badge">Popular</span>');
-    const ul = card.querySelector('ul');
-    for (const perk of p.perks) {
-      const li = document.createElement('li');
-      li.textContent = perk;
-      ul.append(li);
-    }
-    const btn = document.createElement('button');
-    btn.className = `btn ${p.featured || current ? 'btn-primary' : ''}`;
-    btn.textContent = current ? 'Manage plan' : a?.hasSubscription ? `Switch to ${p.name}` : `Choose ${p.name}`;
-    btn.onclick = () => (a?.hasSubscription ? goToPortal(btn) : goToCheckout(p.id, btn));
-    card.append(btn);
-    grid.append(card);
+    grid.append(planCard(p, {
+      current,
+      label: current ? 'Manage plan' : a?.hasSubscription ? `Switch to ${p.name}` : `Choose ${p.name}`,
+      onClick: (btn) => (a?.hasSubscription ? goToPortal(btn) : goToCheckout(p.id, btn)),
+    }));
   }
   renderTopups();
   if (!$('plansDialog').open) $('plansDialog').showModal();
@@ -236,11 +257,12 @@ async function goToPortal(btn) {
 
 function renderAccount() {
   const signedIn = auth.isSignedIn();
-  $('signedOut').hidden = signedIn;
-  $('drop').hidden = !signedIn;
+  $('landing').hidden = signedIn;
+  $('capture').hidden = !signedIn;
   $('recent').hidden = !signedIn;
   $('account').hidden = !signedIn;
   $('signInTop').hidden = signedIn;
+  if (!signedIn) renderLandingPlans();
   const email = auth.email();
   $('userEmail').textContent = email || 'Signed in';
   $('avatar').textContent = (email[0] || '•').toUpperCase();
@@ -249,9 +271,8 @@ function renderAccount() {
 /* ------------------------------------------------------------------ UI wiring */
 
 function bindUi() {
-  $('signInBtn').onclick = () => auth?.signIn();
-  $('signInTop').onclick = () => auth?.signIn();
-  $('signUpBtn').onclick = () => auth?.signUp();
+  for (const el of document.querySelectorAll('.js-signin')) el.onclick = () => auth?.signIn();
+  for (const el of document.querySelectorAll('.js-signup')) el.onclick = () => auth?.signUp();
   $('signOutBtn').onclick = () => auth?.signOut();
   $('billingBtn').onclick = () => { $('account').open = false; state.account?.hasSubscription ? goToPortal() : openPlans(); };
   $('usageBtn').onclick = () => openPlans();
@@ -309,6 +330,7 @@ function hasUnsavedWork() {
 }
 
 function showCapture() {
+  if (!auth?.isSignedIn()) { renderAccount(); return; }
   if (state.batch?.running && !confirm('Some notes are still being converted. Stop and leave?')) return;
   if (!state.batch?.running && hasUnsavedWork() && !confirm('These notes aren’t saved on your plan. Leave them?')) return;
   flushSave();
@@ -409,11 +431,11 @@ async function startWithFile(file) {
 async function startWithSample() {
   try {
     const blob = await rasterizeSvg(SAMPLE_SVG, 840, 1080);
-    openWorkspace('Sample note');
+    openWorkspace('Sample letter');
     showPreview({ blob, type: blob.type });
     runExtraction(blob);
   } catch {
-    toast('The sample note couldn’t be created in this browser.');
+    toast('The sample letter couldn’t be created in this browser.');
   }
 }
 
@@ -428,8 +450,8 @@ async function runExtraction(blob) {
     const note = await api.extract(key);
     loadNote(note);
     setStatus('done', note.saved
-      ? 'Done. Check the text and fix anything that looks off.'
-      : 'Done. Your plan doesn’t save notes, so copy or download what you need.');
+      ? 'Done. Compare it with the page and fix anything it misread.'
+      : 'Done. Your plan doesn’t save pages, so copy or download what you need.');
   } catch (e) {
     setStatus('err', e.message, { retry: ![401, 402, 413, 415].includes(e.status) });
     if (e.status === 402) openPlans(e.message);

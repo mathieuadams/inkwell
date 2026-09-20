@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#EDF0F5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F1526" media="(prefers-color-scheme: dark)">
-<meta name="description" content="Turn photos of handwritten notes into text you can edit and translate.">
-<title>Inkwell — handwriting to text</title>
+<meta name="theme-color" content="#F5EFE3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17140F" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Read and translate your family's handwritten letters. Photograph old letters, postcards and diaries; Inkwell reads the handwriting and translates it into your language.">
+<title>Inkwell — read and translate your family's handwritten letters</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/styles.css">
 <script type="module" src="/js/app.js"></script>
 </head>
@@ -27,7 +27,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
     </button>
     <button class="usage-chip" id="usageBtn" hidden aria-label="Your plan and usage"><span id="usagePlan"></span><span id="usageText"></span></button>
-    <button class="btn btn-sm" id="signInTop" hidden>Sign in</button>
+    <button class="btn btn-sm js-signin" id="signInTop" hidden>Sign in</button>
     <details class="account" id="account" hidden>
       <summary class="avatar" id="avatar" aria-label="Account">?</summary>
       <div class="menu">
@@ -42,28 +42,132 @@
 <main>
   <div class="banner" id="fatal" role="alert" hidden></div>
 
-  <!-- CAPTURE -->
-  <section id="capture">
-    <div class="hero">
-      <h1>Handwritten notes, turned into text you can edit and translate.</h1>
-      <p>Snap a photo of a page, a whiteboard or a sticky note. Inkwell reads it, lets you fix anything, and translates it into another language.</p>
-    </div>
-
-    <div class="drop solid" id="signedOut" hidden>
-      <div>
-        <h2>Sign in to start</h2>
-        <p class="hint">Your notes are private to your account, so you can come back to them on any device.</p>
-        <div class="drop-actions">
-          <button class="btn btn-primary" id="signInBtn">Sign in</button>
-          <button class="btn" id="signUpBtn">Create account</button>
+  <!-- LANDING (signed out) -->
+  <section id="landing" hidden>
+    <div class="hero-wrap">
+      <div class="hero">
+        <p class="eyebrow">For families with a box of old letters</p>
+        <h1>Read the letters<br>no one in the family<br>can read anymore.</h1>
+        <p class="lede">Photograph a letter, a postcard or a diary page. Inkwell reads the handwriting — including century-old cursive — and translates it into your language in seconds.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-lg js-signup">Read your first letter free</button>
+          <button class="btn btn-lg js-signin">Sign in</button>
         </div>
+        <p class="hint">Three free pages. No card needed to start.</p>
       </div>
-      <div class="mini-note" aria-hidden="true"><span>Weekend plans</span><span>market at 9</span><span>call Mom</span><span>fix bike tire</span><span>water plants!</span></div>
+
+      <figure class="showcase">
+        <div class="showcase-card letter">
+          <svg viewBox="0 0 300 380" role="img" aria-label="A handwritten letter in German">
+            <defs><pattern id="rules" width="300" height="26" patternUnits="userSpaceOnUse" y="60"><line x1="0" y1="25.5" x2="300" y2="25.5" stroke="#CFC2A6" stroke-width="1"/></pattern></defs>
+            <rect width="300" height="380" fill="#FBF3E2"/>
+            <rect width="300" height="380" fill="url(#rules)"/>
+            <g font-family="Caveat, cursive" fill="#2C3E7B" transform="rotate(-1 150 190)">
+              <text x="30" y="56" font-size="26">Liebe Constanze!</text>
+              <text x="30" y="104" font-size="20">Damit Du wieder einmal Post</text>
+              <text x="30" y="130" font-size="20">aus Deutschland bekommst,</text>
+              <text x="30" y="156" font-size="20">schicke ich Dir die Karte.</text>
+              <text x="30" y="208" font-size="20">Wie geht es Dir denn so?</text>
+              <text x="30" y="234" font-size="20">Musst Du viel lernen?</text>
+              <text x="30" y="286" font-size="20">Ich würde mich sehr freuen,</text>
+              <text x="30" y="312" font-size="20">Dich zu sehen!</text>
+            </g>
+          </svg>
+        </div>
+        <div class="showcase-arrow" aria-hidden="true">
+          <svg viewBox="0 0 48 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h42M36 4l8 8-8 8"/></svg>
+        </div>
+        <div class="showcase-card typed">
+          <p class="typed-head">English</p>
+          <p>Dear Constanze!</p>
+          <p>So that you get mail from Germany again, I'm sending you the card.</p>
+          <p>How are you doing? Do you have to study a lot?</p>
+          <p>I would be very happy to see you!</p>
+        </div>
+      </figure>
     </div>
 
-    <div class="drop" id="drop" hidden>
+    <section class="band">
+      <h2>Every family has a box like this</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Letters from grandparents</h3>
+          <p>Pages of cursive that stopped being teachable two generations ago, in a language the family stopped speaking one generation ago.</p>
+        </article>
+        <article class="card">
+          <h3>Postcards from the old country</h3>
+          <p>A few lines on the back of a photograph, written in German, Italian, Polish or Swedish, still unread in an album.</p>
+        </article>
+        <article class="card">
+          <h3>Diaries and recipe cards</h3>
+          <p>A grandmother's handwriting you'd know anywhere, on pages too fragile to pass around the family.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>Three steps, about a minute</h2>
+      <ol class="steps">
+        <li><span class="step-n">1</span><div><h3>Photograph the page</h3><p>Phone camera is fine. Flat, in daylight, straight on. You can add up to 20 pages at once.</p></div></li>
+        <li><span class="step-n">2</span><div><h3>Inkwell reads the handwriting</h3><p>It keeps the line breaks and lists, marks anything genuinely unreadable, and lets you correct a word it misread.</p></div></li>
+        <li><span class="step-n">3</span><div><h3>Translate and keep it</h3><p>Turn it into English — or any language your family reads — then copy, download, or keep it in your archive.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="band">
+      <h2>The hands and languages you can't read</h2>
+      <p class="band-lede">Old cursive, cramped margins, faded ink and mixed languages on one page. Inkwell reads the page in the language it was written in, then translates it into yours.</p>
+      <div class="chips" aria-label="Some supported languages">
+        <span>German</span><span>Italian</span><span>French</span><span>Polish</span><span>Spanish</span><span>Portuguese</span><span>Dutch</span><span>Swedish</span><span>Hungarian</span><span>Czech</span><span>Ukrainian</span><span>Japanese</span><span>and more</span>
+      </div>
+      <p class="hint">Automated reading isn't perfect on difficult hands. Everything is editable, so you can fix a name or a date before you save it.</p>
+    </section>
+
+    <section class="band">
+      <h2>Your family's letters stay yours</h2>
+      <div class="cards">
+        <article class="card"><h3>Private to your account</h3><p>Only you can open your pages. They're encrypted in storage and in transit.</p></article>
+        <article class="card"><h3>Never used to train AI</h3><p>Reading and translation run on Amazon Bedrock, where your pages aren't used to train models or shared with model providers.</p></article>
+        <article class="card"><h3>Kept as long as you want</h3><p>Plus keeps your pages for 30 days. Pro keeps them while you're subscribed, so the whole box becomes an archive you can search.</p></article>
+      </div>
+    </section>
+
+    <section class="band" id="pricing">
+      <h2>Start with three free pages</h2>
+      <p class="band-lede">Then pick the plan that matches the size of your box. Cancel anytime.</p>
+      <div class="plan-grid" id="landingPlans"></div>
+      <p class="hint">Need more pages one month? Add 20, 50 or 100 pages at any time. Top-up pages never expire.</p>
+    </section>
+
+    <section class="band">
+      <h2>Questions</h2>
+      <div class="faq">
+        <details><summary>Can it read old-fashioned cursive?</summary><p>Usually, yes, including the looping hands common in 19th and early 20th century letters. Very faded ink, heavy crossing-out or shorthand can defeat it; those spots are marked so you know where to look at the original.</p></details>
+        <details><summary>What if it gets a word wrong?</summary><p>Edit it. The text sits in an editor next to the photo, so you can compare and fix names, places and dates before translating or saving.</p></details>
+        <details><summary>Which languages can it translate into?</summary><p>Any common language, in either direction. Seven are one tap away and more are in the dropdown.</p></details>
+        <details><summary>Do I have to type anything?</summary><p>No. Photograph the page and the text appears. Typing is only for corrections.</p></details>
+        <details><summary>What happens to my photos?</summary><p>On the free and Starter plans, the photo is deleted as soon as the page is read and nothing is stored. On Plus it's kept 30 days, on Pro for as long as you subscribe. You can delete anything yourself at any time.</p></details>
+        <details><summary>Can I do a whole box at once?</summary><p>Up to 20 pages per batch, as many batches as your plan allows. Download the whole batch as one text file when it's done.</p></details>
+      </div>
+    </section>
+
+    <section class="band final-cta">
+      <h2>Someone wrote it to be read.</h2>
+      <p class="band-lede">It's been waiting a long time. Start with three pages, free.</p>
+      <button class="btn btn-primary btn-lg js-signup">Read your first letter free</button>
+    </section>
+  </section>
+
+  <!-- CAPTURE (signed in) -->
+  <section id="capture" hidden>
+    <div class="hero app-hero">
+      <h1>What are we reading today?</h1>
+      <p class="lede">Photograph a letter, a postcard or a page of notes. Inkwell reads the handwriting and translates it.</p>
+    </div>
+
+    <div class="drop" id="drop">
       <div>
-        <h2>Add a note</h2>
+        <h2>Add pages</h2>
         <p class="hint">Photos work best in good light, flat and straight on. JPG, PNG, HEIC or PDF (up to 4.5 MB). Select or drop up to 20 files at once.</p>
         <div class="drop-actions">
           <label class="btn btn-primary">
@@ -76,18 +180,18 @@
             Upload files
             <input class="sr" type="file" accept="image/*,application/pdf" id="fileInput" multiple>
           </label>
-          <button class="btn btn-ghost" id="sampleBtn">Try a sample note</button>
+          <button class="btn btn-ghost" id="sampleBtn">Try a sample letter</button>
         </div>
       </div>
-      <div class="mini-note" aria-hidden="true"><span>Weekend plans</span><span>market at 9</span><span>call Mom</span><span>fix bike tire</span><span>water plants!</span></div>
+      <div class="mini-note" aria-hidden="true"><span>Liebe Constanze!</span><span>Damit Du wieder</span><span>einmal Post aus</span><span>Deutschland</span><span>bekommst...</span></div>
     </div>
 
     <div class="recent" id="recent" hidden>
-      <h3>Recent notes</h3>
+      <h3>Your pages</h3>
       <ul class="recent-list" id="recentList"></ul>
-      <p class="recent-empty" id="recentEmpty" hidden>Notes you add show up here.</p>
+      <p class="recent-empty" id="recentEmpty" hidden>Pages you add show up here.</p>
       <div class="storage-hint" id="storageHint" hidden>
-        <p>Your plan doesn't keep notes. Plus keeps them for 30 days, Pro for as long as you're subscribed.</p>
+        <p>Your plan doesn't keep pages. Plus keeps them for 30 days, Pro for as long as you're subscribed.</p>
         <button class="btn btn-sm" id="storageUpgradeBtn">See plans</button>
       </div>
     </div>
