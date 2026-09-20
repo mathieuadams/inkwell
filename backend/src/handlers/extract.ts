@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { DeleteObjectCommand, GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { s3, bucket, saveNote, type Note } from '../lib/storage';
-import { getAccount, saveUsage } from '../lib/account';
+import { getAccount, updateUsage } from '../lib/account';
 import { checkAllowance, recordUsage, storesNotes, summary } from '../lib/plans';
 import { transcribe } from '../lib/bedrock';
 import { assertOwnedUpload, formatFor, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '../lib/validation';
@@ -50,9 +50,8 @@ export const handler = handle(async (event) => {
   };
 
   const saved = storesNotes(billing);
-  const nextUsage = recordUsage(billing, usage, 'page');
-  await Promise.all([
-    saveUsage(sub, nextUsage),
+  const [nextUsage] = await Promise.all([
+    updateUsage(sub, (u) => recordUsage(billing, u, 'page')),
     saved
       ? saveNote(sub, note)
       : s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key })).catch((e) => console.warn('Upload delete failed', e)),

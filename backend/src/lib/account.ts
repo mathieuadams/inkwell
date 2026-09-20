@@ -25,6 +25,47 @@ export const getBilling = (sub: string) => readJson<Billing>(billingKey(sub), ne
 export const saveBilling = (sub: string, b: Billing) => writeJson(billingKey(sub), b);
 export const getUsage = (sub: string) => readJson<Usage>(usageKey(sub), newUsage);
 export const saveUsage = (sub: string, u: Usage) => writeJson(usageKey(sub), u);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Atomic read-modify-write of usage.json using S3 conditional writes (If-Match / If-None-Match),
+ * so pages converted in parallel (batch upload) are all counted.
+ */
+export async function updateUsage(sub: string, change: (u: Usage) => Usage): Promise<Usage> {
+  const Key = usageKey(sub);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    let current = newUsage();
+    let etag: string | undefined;
+    try {
+      const res = await s3.send(new GetObjectCommand({ Bucket: bucket(), Key }));
+      etag = res.ETag;
+      current = { ...newUsage(), ...JSON.parse(await res.Body!.transformToString()) };
+    } catch (err) {
+      if ((err as { name?: string }).name !== 'NoSuchKey') throw err;
+    }
+    const next = change(current);
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key,
+          Body: JSON.stringify(next),
+          ContentType: 'application/json',
+          ...(etag ? { IfMatch: etag } : { IfNoneMatch: '*' }),
+        }),
+      );
+      return next;
+    } catch (err) {
+      const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+      const status = e.$metadata?.httpStatusCode;
+      const conflict = status === 412 || status === 409 || e.name === 'PreconditionFailed' || e.name === 'ConditionalRequestConflict';
+      if (!conflict) throw err;
+      await sleep(40 * 2 ** attempt + Math.random() * 40);
+    }
+  }
+  throw new Error(`Could not update usage for ${sub} after retries`);
+}
 export const getCredits = (sub: string) => readJson<Credits>(creditsKey(sub), newCredits);
 export const saveCredits = (sub: string, c: Credits) => writeJson(creditsKey(sub), c);
 

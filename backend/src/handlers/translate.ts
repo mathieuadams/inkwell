@@ -2,7 +2,7 @@
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { translate } from '../lib/bedrock';
 import { getNote, saveNote } from '../lib/storage';
-import { getAccount, saveUsage } from '../lib/account';
+import { getAccount, updateUsage } from '../lib/account';
 import { checkAllowance, recordUsage, storesNotes, summary } from '../lib/plans';
 import { isLanguage, isNoteId, MAX_TEXT_CHARS } from '../lib/validation';
 
@@ -22,9 +22,9 @@ export const handler = handle(async (event) => {
   // Load first so a bad noteId fails before we spend a model call.
   const note = noteId && storesNotes(billing) ? await getNote(sub, noteId) : null;
   const translated = await translate(text, target);
-  const nextUsage = recordUsage(billing, usage, 'translation');
+  const nextUsage = await updateUsage(sub, (u) => recordUsage(billing, u, 'translation'));
 
-  const writes: Promise<unknown>[] = [saveUsage(sub, nextUsage)];
+  const writes: Promise<unknown>[] = [];
   if (note) {
     const now = new Date().toISOString();
     if (note.text !== text) {
