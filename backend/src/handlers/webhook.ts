@@ -1,8 +1,8 @@
 /** POST /stripe/webhook  (no JWT; authenticated by the Stripe-Signature header) */
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { requireEnv } from '../lib/http';
-import { getBilling, saveBilling } from '../lib/account';
-import { applySubscription, parseSubscription, shouldApply } from '../lib/plans';
+import { getBilling, getCredits, saveBilling, saveCredits } from '../lib/account';
+import { applySubscription, isTopupPack, parseSubscription, shouldApply } from '../lib/plans';
 import { getSecret, stripe } from '../lib/stripe';
 import { verifyStripeSignature } from '../lib/stripe-utils';
 import { isNoteId as isUuid } from '../lib/validation';
@@ -33,6 +33,23 @@ async function sync(subscriptionId: string, hintSub?: string | null) {
   console.info('Billing updated', JSON.stringify({ sub, plan: next.plan, status: next.status }));
 }
 
+/** Adds purchased pages once per Checkout Session, even if Stripe delivers the event twice. */
+async function grantTopup(session: any) {
+  if (session.payment_status !== 'paid') return; // async methods arrive later via async_payment_succeeded
+  const sub = session.metadata?.sub || session.client_reference_id;
+  const pages = Number(session.metadata?.pages);
+  if (!isUuid(sub) || !isTopupPack(pages)) {
+    console.warn('Top-up session without a valid user or pack', session.id);
+    return;
+  }
+  const credits = await getCredits(sub);
+  if (credits.grants.includes(session.id)) return;
+  credits.purchased += pages;
+  credits.grants = [...credits.grants, session.id].slice(-500);
+  await saveCredits(sub, credits);
+  console.info('Top-up credited', JSON.stringify({ sub, pages, purchased: credits.purchased }));
+}
+
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   const raw = event.isBase64Encoded ? Buffer.from(event.body ?? '', 'base64').toString('utf8') : (event.body ?? '');
   let secret: string;
@@ -48,8 +65,11 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     const obj = evt?.data?.object ?? {};
     switch (evt.type) {
       case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
         if (obj.mode === 'subscription' && obj.subscription) {
           await sync(typeof obj.subscription === 'string' ? obj.subscription : obj.subscription.id, obj.client_reference_id);
+        } else if (obj.mode === 'payment' && obj.metadata?.kind === 'topup') {
+          await grantTopup(obj);
         }
         break;
       case 'customer.subscription.created':

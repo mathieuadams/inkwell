@@ -2,7 +2,7 @@
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { translate } from '../lib/bedrock';
 import { getNote, saveNote } from '../lib/storage';
-import { getBilling, getUsage, saveUsage } from '../lib/account';
+import { getAccount, saveUsage } from '../lib/account';
 import { checkAllowance, recordUsage, storesNotes, summary } from '../lib/plans';
 import { isLanguage, isNoteId, MAX_TEXT_CHARS } from '../lib/validation';
 
@@ -15,8 +15,8 @@ export const handler = handle(async (event) => {
   if (!isLanguage(target)) throw new HttpError(400, 'Choose a language to translate into.');
   if (noteId !== undefined && noteId !== null && !isNoteId(noteId)) throw new HttpError(400, 'Unknown note.');
 
-  const [billing, usage] = await Promise.all([getBilling(sub), getUsage(sub)]);
-  const blocked = checkAllowance(billing, usage, 'translation');
+  const { billing, usage, credits } = await getAccount(sub);
+  const blocked = checkAllowance(billing, usage, 'translation', process.env, credits);
   if (blocked) throw new HttpError(402, blocked);
 
   // Load first so a bad noteId fails before we spend a model call.
@@ -37,5 +37,5 @@ export const handler = handle(async (event) => {
   }
   await Promise.all(writes);
 
-  return json(200, { target, text: translated, account: summary(billing, nextUsage) });
+  return json(200, { target, text: translated, account: summary(billing, nextUsage, process.env, credits) });
 });

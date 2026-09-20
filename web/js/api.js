@@ -66,6 +66,7 @@ export function createApi(cfg, auth) {
     deleteNote: (id) => request('DELETE', `/notes/${encodeURIComponent(id)}`),
     account: () => request('GET', '/account'),
     checkout: (plan) => request('POST', '/billing/checkout', { plan }),
+    topup: (pages) => request('POST', '/billing/topup', { pages }),
     portal: () => request('POST', '/billing/portal'),
   };
 }

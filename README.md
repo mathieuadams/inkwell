@@ -100,6 +100,8 @@ Prod: publish a GitHub release (e.g. `v1.0.0`). It waits for approval, then depl
 | Plus | $10 | 150 | 30 days |
 | Pro | $25 | 500 | While subscribed |
 
+Top-up packs (one-time Checkout payments): +20 pages $3, +50 $6, +100 $10. Used after monthly pages, never expire; set `STRIPE_PRODUCT_TOPUP_20/50/100` GitHub variables to the Stripe product IDs (default price = the pack price). Uploads accept up to 20 files at once, converted two at a time.
+
 Translations are capped at 5× the page quota. After a downgrade or cancellation, stored notes are kept 30 days before the new plan's retention applies (daily cleanup Lambda).
 
 Setup per stage (dev uses Stripe **test mode**, prod uses **live mode**):
@@ -107,7 +109,7 @@ Setup per stage (dev uses Stripe **test mode**, prod uses **live mode**):
 1. Stripe products, each with its monthly price as the default price, then GitHub variables `STRIPE_PRODUCT_STARTER`, `STRIPE_PRODUCT_PLUS`, `STRIPE_PRODUCT_PRO` (`prod_...`). Optional `FREE_PAGES`.
 2. Restricted key (Checkout Sessions W, Customers W, Customer portal W, Subscriptions R, Prices R, Products R) in SSM:
    `aws ssm put-parameter --name /inkwell/dev/stripe/secret-key --type SecureString --value rk_test_...`
-3. Deploy, then add a Stripe webhook to the `StripeWebhookUrl` output with events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, and store its signing secret:
+3. Deploy, then add a Stripe webhook to the `StripeWebhookUrl` output with events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, and store its signing secret:
    `aws ssm put-parameter --name /inkwell/dev/stripe/webhook-secret --type SecureString --value whsec_...`
 4. Stripe customer portal: enable plan switching (all three products) and cancellation.
 

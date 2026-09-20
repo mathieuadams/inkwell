@@ -24,7 +24,7 @@ export interface InkwellStackProps extends cdk.StackProps {
   /** Bedrock model or inference-profile id used to translate. */
   translateModelId: string;
   /** Stripe product ids (prod_...) for the monthly plans; each product's default price is used. Empty = billing disabled. */
-  stripeProducts: { starter: string; plus: string; pro: string };
+  stripeProducts: { starter: string; plus: string; pro: string; topup20: string; topup50: string; topup100: string };
   /** Pages a new account can convert before subscribing. */
   freePages: string;
 }
@@ -192,6 +192,9 @@ export class InkwellStack extends cdk.Stack {
           STRIPE_PRODUCT_STARTER: props.stripeProducts.starter,
           STRIPE_PRODUCT_PLUS: props.stripeProducts.plus,
           STRIPE_PRODUCT_PRO: props.stripeProducts.pro,
+          STRIPE_PRODUCT_TOPUP_20: props.stripeProducts.topup20,
+          STRIPE_PRODUCT_TOPUP_50: props.stripeProducts.topup50,
+          STRIPE_PRODUCT_TOPUP_100: props.stripeProducts.topup100,
           STRIPE_SECRET_PARAM: `${stripeParamPrefix}/secret-key`,
           STRIPE_WEBHOOK_PARAM: `${stripeParamPrefix}/webhook-secret`,
           NODE_OPTIONS: '--enable-source-maps',
@@ -298,6 +301,7 @@ export class InkwellStack extends cdk.Stack {
     const billingIntegration = new HttpLambdaIntegration('BillingIntegration', billingFn);
     api.addRoutes({ path: '/account', methods: [M.GET], integration: billingIntegration });
     api.addRoutes({ path: '/billing/checkout', methods: [M.POST], integration: billingIntegration });
+    api.addRoutes({ path: '/billing/topup', methods: [M.POST], integration: billingIntegration });
     api.addRoutes({ path: '/billing/portal', methods: [M.POST], integration: billingIntegration });
     // Stripe can't send a Cognito JWT; the handler verifies the Stripe-Signature header instead.
     api.addRoutes({

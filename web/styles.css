@@ -206,3 +206,28 @@ main{max-width:1180px;margin:0 auto;padding:8px 20px 48px}
 .legal .table-wrap{overflow-x:auto}
 .legal .summary{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
 .legal .summary p{margin:0}
+
+/* Top-ups */
+.topup{margin-top:18px;padding:18px 20px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);display:flex;gap:16px 24px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.topup h3{margin:0 0 4px;font-size:1.05rem}
+.topup .hint{margin:0}
+.topup-options{display:flex;gap:8px;flex-wrap:wrap}
+.topup-btn{display:grid;justify-items:center;gap:0;min-width:96px;padding:8px 14px;min-height:56px}
+.topup-btn b{font-size:1rem}
+.topup-btn small{color:var(--muted);font-weight:500;font-size:.8rem}
+.usage-chip .bonus{color:var(--ok);font-weight:700}
+
+/* Batch */
+.batch-progress{height:6px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.batch-progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.batch-status{color:var(--muted);font-size:.9rem;margin:10px 0 14px}
+.batch-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.batch-item{display:flex;gap:12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);width:100%;text-align:left}
+button.batch-item:hover{border-color:var(--accent)}
+.batch-thumb{width:56px;height:72px;border-radius:6px;object-fit:cover;background:var(--surface-2);flex:none;border:1px solid var(--line)}
+.batch-info{min-width:0;flex:1;display:grid;gap:2px}
+.batch-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.batch-state{font-size:.84rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.batch-state.err{color:var(--err)}
+.batch-state.done{color:var(--ok)}
+.batch-thumb.pdf-placeholder{padding:0;font-size:.75rem;aspect-ratio:auto;display:grid;place-items:center}

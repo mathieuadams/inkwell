@@ -11,7 +11,7 @@ beforeAll(() => {
     stage: 'test',
     extractModelId: 'test-extract-model',
     translateModelId: 'test-translate-model',
-    stripeProducts: { starter: 'prod_s', plus: 'prod_p', pro: 'prod_x' },
+    stripeProducts: { starter: 'prod_s', plus: 'prod_p', pro: 'prod_x', topup20: 'prod_t20', topup50: 'prod_t50', topup100: 'prod_t100' },
     freePages: '3',
     env: { account: '123456789012', region: 'us-east-1' },
   });
@@ -39,7 +39,7 @@ describe('InkwellStack', () => {
 
   it('protects every API route with the Cognito JWT authorizer except the Stripe webhook', () => {
     const routes = Object.values(t.findResources('AWS::ApiGatewayV2::Route'));
-    expect(routes).toHaveLength(11);
+    expect(routes).toHaveLength(12);
     for (const r of routes) {
       const expected = r.Properties.RouteKey === 'POST /stripe/webhook' ? 'NONE' : 'JWT';
       expect(r.Properties.AuthorizationType ?? 'NONE').toBe(expected);

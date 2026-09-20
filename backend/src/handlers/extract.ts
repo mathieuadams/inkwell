@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { DeleteObjectCommand, GetObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { s3, bucket, saveNote, type Note } from '../lib/storage';
-import { getBilling, getUsage, saveUsage } from '../lib/account';
+import { getAccount, saveUsage } from '../lib/account';
 import { checkAllowance, recordUsage, storesNotes, summary } from '../lib/plans';
 import { transcribe } from '../lib/bedrock';
 import { assertOwnedUpload, formatFor, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '../lib/validation';
@@ -13,8 +13,8 @@ export const handler = handle(async (event) => {
   const { key } = parseBody<{ key: string }>(event);
   assertOwnedUpload(sub, key);
 
-  const [billing, usage] = await Promise.all([getBilling(sub), getUsage(sub)]);
-  const blocked = checkAllowance(billing, usage, 'page');
+  const { billing, usage, credits } = await getAccount(sub);
+  const blocked = checkAllowance(billing, usage, 'page', process.env, credits);
   if (blocked) throw new HttpError(402, blocked);
 
   let obj: GetObjectCommandOutput;
@@ -58,5 +58,5 @@ export const handler = handle(async (event) => {
       : s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key })).catch((e) => console.warn('Upload delete failed', e)),
   ]);
 
-  return json(201, { ...note, saved, account: summary(billing, nextUsage) });
+  return json(201, { ...note, saved, account: summary(billing, nextUsage, process.env, credits) });
 });

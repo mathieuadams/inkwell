@@ -4,7 +4,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { handle, HttpError, json, parseBody, userId } from '../lib/http';
 import { s3, bucket } from '../lib/storage';
-import { getBilling, getUsage } from '../lib/account';
+import { getAccount } from '../lib/account';
 import { checkAllowance } from '../lib/plans';
 import { ALLOWED_TYPES, isAllowedType, maxBytesFor, uploadPrefix } from '../lib/validation';
 
@@ -19,8 +19,8 @@ export const handler = handle(async (event) => {
   }
 
   // Fail fast before the user uploads a photo they can't convert.
-  const [billing, usage] = await Promise.all([getBilling(sub), getUsage(sub)]);
-  const blocked = checkAllowance(billing, usage, 'page');
+  const { billing, usage, credits } = await getAccount(sub);
+  const blocked = checkAllowance(billing, usage, 'page', process.env, credits);
   if (blocked) throw new HttpError(402, blocked);
 
   const key = `${uploadPrefix(sub)}${randomUUID()}.${ALLOWED_TYPES[contentType]}`;

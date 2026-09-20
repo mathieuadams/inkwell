@@ -9,6 +9,12 @@ export const PAGE_LIMITS: Record<PaidPlan, number> = { starter: 20, plus: 150, p
 export const RETENTION_DAYS: Record<Plan, number | null> = { free: 0, starter: 0, plus: 30, pro: null };
 /** Translations allowed per page of quota, to cap abuse of the translate endpoint. */
 export const TRANSLATIONS_PER_PAGE = 5;
+/** One-time top-up packs (pages). Pages never expire and are used after the monthly quota. */
+export const TOPUP_PACKS = [20, 50, 100] as const;
+export type TopupPack = (typeof TOPUP_PACKS)[number];
+export const isTopupPack = (v: unknown): v is TopupPack => typeof v === 'number' && (TOPUP_PACKS as readonly number[]).includes(v);
+export const topupEnvName = (pages: TopupPack) => `STRIPE_PRODUCT_TOPUP_${pages}`;
+
 /** After a downgrade or cancellation, stored notes are kept this long before cleanup applies the new plan. */
 export const GRACE_DAYS = 30;
 
@@ -33,6 +39,16 @@ export interface Usage {
   period?: number; // Billing.periodStart the counters below belong to
   pages: number;
   translations: number;
+  /** Top-up pages consumed, lifetime. */
+  bonusUsed: number;
+}
+
+/** Written only by the Stripe webhook. */
+export interface Credits {
+  /** Top-up pages bought, lifetime. */
+  purchased: number;
+  /** Checkout session ids already credited (idempotency). */
+  grants: string[];
 }
 
 export interface SubscriptionState {
@@ -48,7 +64,9 @@ export interface SubscriptionState {
 type Env = Record<string, string | undefined>;
 
 export const newBilling = (): Billing => ({ plan: 'free', status: 'none' });
-export const newUsage = (): Usage => ({ freePages: 0, freeTranslations: 0, pages: 0, translations: 0 });
+export const newUsage = (): Usage => ({ freePages: 0, freeTranslations: 0, pages: 0, translations: 0, bonusUsed: 0 });
+export const newCredits = (): Credits => ({ purchased: 0, grants: [] });
+export const creditsLeft = (u: Usage, c: Credits) => Math.max(0, c.purchased - (u.bonusUsed ?? 0));
 
 export const isPaidPlan = (v: unknown): v is PaidPlan => typeof v === 'string' && (PAID_PLANS as string[]).includes(v);
 export const isActiveStatus = (status: string | undefined) => ACTIVE_STATUSES.has(status ?? '');
@@ -63,16 +81,18 @@ export function freePageAllowance(env: Env = process.env): number {
   return Number.isInteger(n) && n >= 0 ? n : 3;
 }
 
-export function limits(b: Billing, u: Usage, env: Env = process.env) {
+export function limits(b: Billing, u: Usage, env: Env = process.env, c: Credits = newCredits()) {
   const plan = effectivePlan(b);
+  const bonusLeft = creditsLeft(u, c);
   if (plan === 'free') {
     const pagesLimit = freePageAllowance(env);
     return {
       plan,
-      pagesUsed: u.freePages,
+      pagesUsed: Math.min(u.freePages, pagesLimit),
       pagesLimit,
+      bonusLeft,
       translationsUsed: u.freeTranslations,
-      translationsLimit: pagesLimit * TRANSLATIONS_PER_PAGE,
+      translationsLimit: (pagesLimit + c.purchased) * TRANSLATIONS_PER_PAGE,
     };
   }
   const current = u.period !== undefined && u.period === b.periodStart;
@@ -81,19 +101,26 @@ export function limits(b: Billing, u: Usage, env: Env = process.env) {
     plan,
     pagesUsed: current ? u.pages : 0,
     pagesLimit,
+    bonusLeft,
     translationsUsed: current ? u.translations : 0,
-    translationsLimit: pagesLimit * TRANSLATIONS_PER_PAGE,
+    translationsLimit: (pagesLimit + c.purchased) * TRANSLATIONS_PER_PAGE,
   };
 }
 
 /** A message for the user when the action is over quota, otherwise null. */
-export function checkAllowance(b: Billing, u: Usage, kind: 'page' | 'translation', env: Env = process.env): string | null {
-  const l = limits(b, u, env);
-  if (kind === 'page' && l.pagesUsed >= l.pagesLimit) {
-    if (l.plan !== 'free') return `You've used all ${l.pagesLimit} pages on your plan this month. Upgrade for more pages.`;
+export function checkAllowance(
+  b: Billing,
+  u: Usage,
+  kind: 'page' | 'translation',
+  env: Env = process.env,
+  c: Credits = newCredits(),
+): string | null {
+  const l = limits(b, u, env, c);
+  if (kind === 'page' && l.pagesUsed >= l.pagesLimit && l.bonusLeft <= 0) {
+    if (l.plan !== 'free') return `You've used all ${l.pagesLimit} pages on your plan this month. Top up or upgrade for more pages.`;
     return l.pagesLimit > 0
-      ? `You've used your ${l.pagesLimit} free pages. Choose a plan to keep going.`
-      : 'Choose a plan to start converting notes.';
+      ? `You've used your ${l.pagesLimit} free pages. Choose a plan or top up to keep going.`
+      : 'Choose a plan or top up to start converting notes.';
   }
   if (kind === 'translation' && l.translationsUsed >= l.translationsLimit) {
     return l.plan === 'free'
@@ -103,11 +130,14 @@ export function checkAllowance(b: Billing, u: Usage, kind: 'page' | 'translation
   return null;
 }
 
-export function recordUsage(b: Billing, u: Usage, kind: 'page' | 'translation'): Usage {
-  const next = { ...u };
-  if (effectivePlan(b) === 'free') {
-    if (kind === 'page') next.freePages += 1;
-    else next.freeTranslations += 1;
+/** Monthly (or free) pages are used first, then top-up pages. */
+export function recordUsage(b: Billing, u: Usage, kind: 'page' | 'translation', env: Env = process.env): Usage {
+  const next = { ...newUsage(), ...u };
+  const plan = effectivePlan(b);
+  if (plan === 'free') {
+    if (kind === 'translation') next.freeTranslations += 1;
+    else if (next.freePages < freePageAllowance(env)) next.freePages += 1;
+    else next.bonusUsed += 1;
     return next;
   }
   if (next.period === undefined || next.period !== b.periodStart) {
@@ -115,20 +145,23 @@ export function recordUsage(b: Billing, u: Usage, kind: 'page' | 'translation'):
     next.pages = 0;
     next.translations = 0;
   }
-  if (kind === 'page') next.pages += 1;
-  else next.translations += 1;
+  if (kind === 'translation') next.translations += 1;
+  else if (next.pages < PAGE_LIMITS[plan]) next.pages += 1;
+  else next.bonusUsed += 1;
   return next;
 }
 
 export const storesNotes = (b: Billing) => RETENTION_DAYS[effectivePlan(b)] !== 0;
 
-export function summary(b: Billing, u: Usage, env: Env = process.env) {
-  const l = limits(b, u, env);
+export function summary(b: Billing, u: Usage, env: Env = process.env, c: Credits = newCredits()) {
+  const l = limits(b, u, env, c);
   return {
     plan: l.plan,
     status: b.status,
     pagesUsed: l.pagesUsed,
     pagesLimit: l.pagesLimit,
+    bonusPages: l.bonusLeft,
+    topupsReady: TOPUP_PACKS.every((p) => Boolean(env[topupEnvName(p)])),
     periodEnd: b.periodEnd ? b.periodEnd * 1000 : null,
     cancelAtPeriodEnd: Boolean(b.cancelAtPeriodEnd),
     storesNotes: storesNotes(b),

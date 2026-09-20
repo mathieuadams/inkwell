@@ -1,11 +1,12 @@
 import { GetObjectCommand, PutObjectCommand, ListObjectsV2Command, type _Object } from '@aws-sdk/client-s3';
 import { s3, bucket } from './storage';
-import { newBilling, newUsage, type Billing, type Usage } from './plans';
+import { newBilling, newCredits, newUsage, type Billing, type Credits, type Usage } from './plans';
 
 // billing.json is written only by billing/webhook code; usage.json only by extract/translate,
 // so concurrent writers never overwrite each other's fields.
 const billingKey = (sub: string) => `users/${sub}/billing.json`;
 const usageKey = (sub: string) => `users/${sub}/usage.json`;
+const creditsKey = (sub: string) => `users/${sub}/credits.json`; // written only by the webhook
 
 async function readJson<T>(key: string, fallback: () => T): Promise<T> {
   try {
@@ -24,6 +25,14 @@ export const getBilling = (sub: string) => readJson<Billing>(billingKey(sub), ne
 export const saveBilling = (sub: string, b: Billing) => writeJson(billingKey(sub), b);
 export const getUsage = (sub: string) => readJson<Usage>(usageKey(sub), newUsage);
 export const saveUsage = (sub: string, u: Usage) => writeJson(usageKey(sub), u);
+export const getCredits = (sub: string) => readJson<Credits>(creditsKey(sub), newCredits);
+export const saveCredits = (sub: string, c: Credits) => writeJson(creditsKey(sub), c);
+
+/** Everything quota checks need, read in parallel. */
+export async function getAccount(sub: string) {
+  const [billing, usage, credits] = await Promise.all([getBilling(sub), getUsage(sub), getCredits(sub)]);
+  return { billing, usage, credits };
+}
 
 export async function* listObjects(prefix: string, delimiter?: string): AsyncGenerator<_Object | { Prefix: string }> {
   let token: string | undefined;

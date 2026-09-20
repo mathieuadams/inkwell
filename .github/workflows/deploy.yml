@@ -79,6 +79,9 @@ jobs:
             -c stripeProductStarter="${{ vars.STRIPE_PRODUCT_STARTER }}" \
             -c stripeProductPlus="${{ vars.STRIPE_PRODUCT_PLUS }}" \
             -c stripeProductPro="${{ vars.STRIPE_PRODUCT_PRO }}" \
+            -c stripeProductTopup20="${{ vars.STRIPE_PRODUCT_TOPUP_20 }}" \
+            -c stripeProductTopup50="${{ vars.STRIPE_PRODUCT_TOPUP_50 }}" \
+            -c stripeProductTopup100="${{ vars.STRIPE_PRODUCT_TOPUP_100 }}" \
             -c freePages="${{ vars.FREE_PAGES }}" \
             --require-approval never \
             --outputs-file cdk-outputs.json

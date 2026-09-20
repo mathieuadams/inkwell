@@ -29,10 +29,16 @@ const PLANS = [
   { id: 'pro', name: 'Pro', price: 25, pages: 500, perks: ['500 pages a month', 'Translate into any language', 'Notes kept while subscribed', 'Build a searchable archive'] },
 ];
 const PLAN_NAMES = { free: 'Free', starter: 'Starter', plus: 'Plus', pro: 'Pro' };
+// Display prices; the amount charged is each Stripe product's default price.
+const TOPUPS = [{ pages: 20, price: 3 }, { pages: 50, price: 6 }, { pages: 100, price: 10 }];
+const MAX_BATCH = 20;
+const BATCH_CONCURRENCY = 2;
+const BONUS_KEY = 'inkwell.bonusBefore';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let auth;
 let api;
-const state = { note: null, lang: 'French', lastBlob: null, saveTimer: null, previewUrl: null, busy: false, account: null };
+const state = { note: null, lang: 'French', lastBlob: null, saveTimer: null, previewUrl: null, busy: false, account: null, batch: null };
 
 bindUi();
 renderLangs();
@@ -69,6 +75,7 @@ async function boot() {
   await refreshAccount();
   refreshRecent();
   if (billingReturn === 'success') waitForSubscription();
+  if (billingReturn === 'topup') waitForTopup();
   if (billingReturn === 'cancel') toast('Checkout cancelled. You have not been charged.');
 }
 
@@ -95,10 +102,18 @@ function renderUsage() {
   $('usageBtn').hidden = !a;
   if (!a) return;
   $('usagePlan').textContent = PLAN_NAMES[a.plan] || a.plan;
+  const left = Math.max(0, a.pagesLimit - a.pagesUsed);
   $('usageText').textContent = a.plan === 'free'
-    ? `${Math.max(0, a.pagesLimit - a.pagesUsed)} free ${a.pagesLimit - a.pagesUsed === 1 ? 'page' : 'pages'} left`
+    ? `${left} free ${left === 1 ? 'page' : 'pages'} left`
     : `${a.pagesUsed} / ${a.pagesLimit} pages`;
-  $('usageBtn').classList.toggle('low', a.pagesUsed >= a.pagesLimit);
+  if (a.bonusPages > 0) {
+    const bonus = document.createElement('span');
+    bonus.className = 'bonus';
+    bonus.textContent = ` +${a.bonusPages}`;
+    bonus.title = `${a.bonusPages} top-up pages`;
+    $('usageText').append(bonus);
+  }
+  $('usageBtn').classList.toggle('low', left === 0 && !a.bonusPages);
   $('storageHint').hidden = a.storesNotes;
 }
 
@@ -115,6 +130,52 @@ async function waitForSubscription() {
     await new Promise((r) => setTimeout(r, 2000));
   }
   toast('Your plan will show up in a moment. Refresh the page if it doesn’t.');
+}
+
+async function waitForTopup() {
+  toast('Payment received. Adding your pages…');
+  const before = Number(sessionStorage.getItem(BONUS_KEY) ?? 0);
+  sessionStorage.removeItem(BONUS_KEY);
+  for (let i = 0; i < 8; i++) {
+    const a = await refreshAccount();
+    if (a && a.bonusPages > before) {
+      toast(`Done. ${a.bonusPages} top-up pages available.`);
+      return;
+    }
+    await sleep(2000);
+  }
+  toast('Your pages will show up in a moment. Refresh the page if they don’t.');
+}
+
+function pagesAvailable() {
+  const a = state.account;
+  return a ? Math.max(0, a.pagesLimit - a.pagesUsed) + (a.bonusPages || 0) : Infinity;
+}
+
+function renderTopups() {
+  const a = state.account;
+  $('topupBox').hidden = a?.topupsReady === false;
+  const wrap = $('topupOptions');
+  wrap.replaceChildren();
+  for (const t of TOPUPS) {
+    const btn = document.createElement('button');
+    btn.className = 'btn topup-btn';
+    btn.innerHTML = `<b>+${t.pages} pages</b><small>$${t.price}</small>`;
+    btn.onclick = () => buyTopup(t.pages, btn);
+    wrap.append(btn);
+  }
+}
+
+async function buyTopup(pages, btn) {
+  btn.disabled = true;
+  try {
+    sessionStorage.setItem(BONUS_KEY, String(state.account?.bonusPages ?? 0));
+    const { url } = await api.topup(pages);
+    location.assign(url);
+  } catch (e) {
+    toast(e.message);
+    btn.disabled = false;
+  }
 }
 
 function openPlans(message) {
@@ -145,6 +206,7 @@ function openPlans(message) {
     card.append(btn);
     grid.append(card);
   }
+  renderTopups();
   if (!$('plansDialog').open) $('plansDialog').showModal();
 }
 
@@ -197,23 +259,25 @@ function bindUi() {
   $('plansClose').onclick = () => $('plansDialog').close();
   $('plansDialog').addEventListener('click', (e) => { if (e.target === $('plansDialog')) $('plansDialog').close(); });
   window.addEventListener('beforeunload', (e) => {
-    if (state.note && state.note.saved === false) e.preventDefault();
+    if (hasUnsavedWork()) e.preventDefault();
   });
 
   $('homeLink').onclick = (e) => { e.preventDefault(); showCapture(); };
-  $('backBtn').onclick = showCapture;
+  $('backBtn').onclick = () => (state.batch ? showBatch() : showCapture());
   $('newBtn').onclick = showCapture;
+  $('batchBackBtn').onclick = showCapture;
+  $('batchDownloadBtn').onclick = downloadAll;
   $('deleteBtn').onclick = deleteCurrent;
   $('retryBtn').onclick = () => state.lastBlob && runExtraction(state.lastBlob);
 
   $('cameraInput').onchange = (e) => startWithFile(e.target.files[0]);
-  $('fileInput').onchange = (e) => startWithFile(e.target.files[0]);
+  $('fileInput').onchange = (e) => startWithFiles(e.target.files);
   $('sampleBtn').onclick = startWithSample;
 
   const drop = $('drop');
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); }));
-  drop.addEventListener('drop', (e) => startWithFile(e.dataTransfer.files[0]));
+  drop.addEventListener('drop', (e) => startWithFiles(e.dataTransfer.files));
 
   $('tabText').onclick = () => selectTab('text');
   $('tabTr').onclick = () => selectTab('tr');
@@ -238,10 +302,20 @@ function initTheme() {
 
 /* ------------------------------------------------------------------ views */
 
+function hasUnsavedWork() {
+  if (state.batch?.running) return true;
+  if (state.batch?.items.some((i) => i.note && i.note.saved === false)) return true;
+  return Boolean(state.note && state.note.saved === false);
+}
+
 function showCapture() {
-  if (state.note && state.note.saved === false && !confirm('This note isn’t saved on your plan. Leave it?')) return;
+  if (state.batch?.running && !confirm('Some notes are still being converted. Stop and leave?')) return;
+  if (!state.batch?.running && hasUnsavedWork() && !confirm('These notes aren’t saved on your plan. Leave them?')) return;
   flushSave();
+  if (state.batch) state.batch.cancelled = true;
+  state.batch = null;
   $('workspace').hidden = true;
+  $('batch').hidden = true;
   $('capture').hidden = false;
   $('cameraInput').value = '';
   $('fileInput').value = '';
@@ -252,6 +326,7 @@ function showCapture() {
 
 function openWorkspace(title) {
   $('capture').hidden = true;
+  $('batch').hidden = true;
   $('workspace').hidden = false;
   $('noteTitle').textContent = title;
   state.note = null;
@@ -398,7 +473,10 @@ function onEdit() {
   if (!state.note) return;
   if (Object.keys(state.note.translations).length) state.note.translations = {};
   resetTranslation();
-  if (!state.note.saved) return;
+  if (!state.note.saved) {
+    state.note.text = $('editor').value;
+    return;
+  }
   setStatus('', 'Unsaved changes');
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(saveText, 1200);
@@ -568,15 +646,19 @@ async function copy(text, message) {
   }
 }
 
-function downloadText() {
-  const name = ($('noteTitle').textContent || 'note').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'note';
-  const url = URL.createObjectURL(new Blob([$('editor').value], { type: 'text/plain;charset=utf-8' }));
+function saveFile(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${name}.txt`;
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('Downloaded');
+}
+
+function downloadText() {
+  const name = ($('noteTitle').textContent || 'note').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'note';
+  saveFile(`${name}.txt`, $('editor').value);
 }
 
 async function share() {
@@ -586,6 +668,168 @@ async function share() {
   } else {
     copy(text, 'Sharing isn’t supported here, so the translation was copied');
   }
+}
+
+/* ------------------------------------------------------------------ batch upload */
+
+const BATCH_LABELS = {
+  queued: 'Waiting',
+  preparing: 'Preparing photo…',
+  uploading: 'Uploading…',
+  reading: 'Reading handwriting…',
+  done: 'Done',
+};
+
+function startWithFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  if (files.length === 1) return startWithFile(files[0]);
+  if (files.length > MAX_BATCH) toast(`Only the first ${MAX_BATCH} files will be converted.`);
+  const selected = files.slice(0, MAX_BATCH);
+
+  const available = pagesAvailable();
+  if (available === 0) {
+    openPlans('You’re out of pages. Top up or upgrade to convert these notes.');
+    return;
+  }
+  if (available < selected.length) {
+    toast(`You have ${available} pages left, so only the first ${available} will be converted.`);
+  }
+  startBatch(selected);
+}
+
+function startBatch(files) {
+  state.batch = {
+    items: files.map((file) => ({ file, name: file.name, status: 'queued', note: null, blob: null, thumb: null, error: '' })),
+    running: true,
+    cancelled: false,
+    quotaShown: false,
+  };
+  $('cameraInput').value = '';
+  $('fileInput').value = '';
+  showBatch();
+  processBatch(state.batch);
+}
+
+async function processBatch(batch) {
+  const worker = async () => {
+    while (!batch.cancelled) {
+      const item = batch.items.find((i) => i.status === 'queued');
+      if (!item) return;
+      item.status = 'preparing';
+      renderBatch(batch);
+      try {
+        item.blob = await prepareFile(item.file);
+        if (item.blob.type !== 'application/pdf') item.thumb = URL.createObjectURL(item.blob);
+        item.status = 'uploading';
+        renderBatch(batch);
+        const key = await api.upload(item.blob);
+        item.status = 'reading';
+        renderBatch(batch);
+        const note = await api.extract(key);
+        note.translations ??= {};
+        setAccount(note.account);
+        delete note.account;
+        item.note = note;
+        item.status = 'done';
+      } catch (e) {
+        item.status = 'error';
+        item.error = e.message;
+        if (e.status === 402) {
+          for (const other of batch.items) {
+            if (other.status === 'queued') { other.status = 'error'; other.error = 'Out of pages'; }
+          }
+          if (!batch.quotaShown && !batch.cancelled) {
+            batch.quotaShown = true;
+            openPlans(e.message);
+          }
+        }
+      }
+      renderBatch(batch);
+    }
+  };
+  await Promise.all(Array.from({ length: BATCH_CONCURRENCY }, worker));
+  batch.running = false;
+  renderBatch(batch);
+  if (!batch.cancelled && state.account?.storesNotes) refreshRecent();
+}
+
+function showBatch() {
+  flushSave();
+  state.note = null;
+  $('capture').hidden = true;
+  $('workspace').hidden = true;
+  $('batch').hidden = false;
+  renderBatch(state.batch);
+  window.scrollTo({ top: 0 });
+}
+
+function renderBatch(batch) {
+  if (!batch || batch !== state.batch || $('batch').hidden) return;
+  const total = batch.items.length;
+  const done = batch.items.filter((i) => i.status === 'done').length;
+  const failed = batch.items.filter((i) => i.status === 'error').length;
+  $('batchTitle').textContent = batch.running ? `Converting ${total} notes` : `${done} of ${total} notes converted`;
+  $('batchBar').style.width = `${Math.round(((done + failed) / total) * 100)}%`;
+  $('batchStatus').textContent = batch.running
+    ? `${done} done${failed ? `, ${failed} failed` : ''}. Keep this page open.`
+    : state.account?.storesNotes
+      ? 'Saved to your notes. Open one to edit or translate it.'
+      : 'Not saved on your plan. Download all, or open a note to copy or translate it.';
+  $('batchDownloadBtn').disabled = done === 0;
+
+  const list = $('batchList');
+  list.replaceChildren();
+  for (const item of batch.items) {
+    const li = document.createElement('li');
+    const el = document.createElement(item.status === 'done' ? 'button' : 'div');
+    el.className = 'batch-item';
+
+    let thumb;
+    if (item.thumb) {
+      thumb = document.createElement('img');
+      thumb.src = item.thumb;
+      thumb.alt = '';
+    } else {
+      thumb = document.createElement('div');
+      thumb.className = 'pdf-placeholder';
+      thumb.textContent = item.blob?.type === 'application/pdf' ? 'PDF' : '';
+    }
+    thumb.classList.add('batch-thumb');
+
+    const info = document.createElement('div');
+    info.className = 'batch-info';
+    const name = document.createElement('span');
+    name.className = 'batch-name';
+    name.textContent = item.note?.title || item.name;
+    const st = document.createElement('span');
+    st.className = `batch-state ${item.status === 'error' ? 'err' : item.status === 'done' ? 'done' : ''}`;
+    const dot = document.createElement('span');
+    dot.className = `dot ${item.status === 'done' ? 'done' : item.status === 'error' ? 'err' : item.status === 'queued' ? '' : 'busy'}`;
+    st.append(dot, item.status === 'error' ? item.error : BATCH_LABELS[item.status]);
+    info.append(name, st);
+
+    el.append(thumb, info);
+    if (item.status === 'done') el.onclick = () => openBatchItem(item);
+    li.append(el);
+    list.append(li);
+  }
+}
+
+function openBatchItem(item) {
+  openWorkspace(item.note.title);
+  showPreview({ blob: item.blob, type: item.blob.type, name: item.name });
+  loadNote(item.note);
+  setStatus('done', item.note.saved ? 'Saved' : 'Not saved on your plan. Copy or download what you need.');
+}
+
+function downloadAll() {
+  const notes = (state.batch?.items ?? []).filter((i) => i.note);
+  if (!notes.length) return;
+  const text = notes
+    .map((i) => `${i.note.title}\n${'='.repeat(Math.min(60, i.note.title.length))}\n\n${i.note.text.trim()}\n`)
+    .join('\n\n');
+  saveFile(`inkwell-notes-${new Date().toISOString().slice(0, 10)}.txt`, text);
 }
 
 let toastTimer;

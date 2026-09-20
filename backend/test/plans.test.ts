@@ -58,6 +58,31 @@ describe('plans and quotas', () => {
     expect(recordUsage(renewed, u, 'page')).toMatchObject({ period: 3000, pages: 1, translations: 0 });
   });
 
+  it('uses top-up pages after the monthly pages run out', () => {
+    const b = paid('starter');
+    const credits = { purchased: 20, grants: ['cs_1'] };
+    const full = { ...newUsage(), period: 1000, pages: 20 };
+    expect(checkAllowance(b, full, 'page', ENV, credits)).toBeNull();
+    const next = recordUsage(b, full, 'page', ENV);
+    expect(next).toMatchObject({ pages: 20, bonusUsed: 1 });
+    expect(limits(b, next, ENV, credits).bonusLeft).toBe(19);
+    expect(checkAllowance(b, { ...full, bonusUsed: 20 }, 'page', ENV, credits)).toMatch(/Top up or upgrade/);
+  });
+
+  it('keeps top-up pages across billing periods', () => {
+    const credits = { purchased: 50, grants: [] };
+    const u = { ...newUsage(), period: 1000, pages: 20, bonusUsed: 10 };
+    const renewed = paid('starter', { periodStart: 3000 });
+    expect(limits(renewed, u, ENV, credits)).toMatchObject({ pagesUsed: 0, bonusLeft: 40 });
+    expect(recordUsage(renewed, u, 'page', ENV)).toMatchObject({ pages: 1, bonusUsed: 10 });
+  });
+
+  it('lets free accounts use top-ups after the free pages', () => {
+    const u = { ...newUsage(), freePages: 3 };
+    expect(checkAllowance(newBilling(), u, 'page', ENV, { purchased: 20, grants: [] })).toBeNull();
+    expect(recordUsage(newBilling(), u, 'page', ENV)).toMatchObject({ freePages: 3, bonusUsed: 1 });
+  });
+
   it('counts free usage separately and for life', () => {
     const u = recordUsage(newBilling(), recordUsage(newBilling(), newUsage(), 'page'), 'translation');
     expect(u).toMatchObject({ freePages: 1, freeTranslations: 1, pages: 0 });
@@ -72,7 +97,7 @@ describe('plans and quotas', () => {
 
   it('summarises the account for the UI', () => {
     expect(summary(paid('plus'), { ...newUsage(), period: 1000, pages: 37 }, ENV)).toMatchObject({
-      plan: 'plus', pagesUsed: 37, pagesLimit: 150, storesNotes: true, retentionDays: 30,
+      plan: 'plus', pagesUsed: 37, pagesLimit: 150, bonusPages: 0, storesNotes: true, retentionDays: 30,
       hasSubscription: true, billingReady: true, periodEnd: 2_000_000,
     });
     expect(summary(newBilling(), newUsage(), {}).billingReady).toBe(false);

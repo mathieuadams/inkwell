@@ -17,6 +17,9 @@ new InkwellStack(app, `Inkwell-${stage}`, {
     starter: app.node.tryGetContext('stripeProductStarter') || '',
     plus: app.node.tryGetContext('stripeProductPlus') || '',
     pro: app.node.tryGetContext('stripeProductPro') || '',
+    topup20: app.node.tryGetContext('stripeProductTopup20') || '',
+    topup50: app.node.tryGetContext('stripeProductTopup50') || '',
+    topup100: app.node.tryGetContext('stripeProductTopup100') || '',
   },
   freePages: String(app.node.tryGetContext('freePages') || '3'),
   env: {

@@ -64,7 +64,7 @@
     <div class="drop" id="drop" hidden>
       <div>
         <h2>Add a note</h2>
-        <p class="hint">Photos work best in good light, flat and straight on. JPG, PNG, HEIC or PDF. PDFs up to 4.5 MB.</p>
+        <p class="hint">Photos work best in good light, flat and straight on. JPG, PNG, HEIC or PDF (up to 4.5 MB). Select or drop up to 20 files at once.</p>
         <div class="drop-actions">
           <label class="btn btn-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -73,8 +73,8 @@
           </label>
           <label class="btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
-            Upload a file
-            <input class="sr" type="file" accept="image/*,application/pdf" id="fileInput">
+            Upload files
+            <input class="sr" type="file" accept="image/*,application/pdf" id="fileInput" multiple>
           </label>
           <button class="btn btn-ghost" id="sampleBtn">Try a sample note</button>
         </div>
@@ -91,6 +91,23 @@
         <button class="btn btn-sm" id="storageUpgradeBtn">See plans</button>
       </div>
     </div>
+  </section>
+
+  <!-- BATCH -->
+  <section id="batch" hidden>
+    <div class="ws-head">
+      <button class="icon-btn" id="batchBackBtn" aria-label="Back to all notes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 id="batchTitle">Converting notes</h2>
+      <button class="btn btn-sm" id="batchDownloadBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>
+        <span class="hide-sm">Download all</span>
+      </button>
+    </div>
+    <div class="batch-progress" aria-hidden="true"><i id="batchBar"></i></div>
+    <p class="batch-status" id="batchStatus" aria-live="polite"></p>
+    <ul class="batch-list" id="batchList"></ul>
   </section>
 
   <!-- WORKSPACE -->
@@ -186,6 +203,13 @@
   </div>
   <p class="plans-msg" id="plansMsg" hidden></p>
   <div class="plan-grid" id="planGrid"></div>
+  <div class="topup" id="topupBox">
+    <div>
+      <h3>Need more pages?</h3>
+      <p class="hint">Top-up pages are a one-time purchase. They're used after your monthly pages and never expire.</p>
+    </div>
+    <div class="topup-options" id="topupOptions"></div>
+  </div>
   <p class="hint plans-foot">Billed monthly. Change or cancel anytime. Page counts reset each billing month. By subscribing you agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
 </dialog>
 
