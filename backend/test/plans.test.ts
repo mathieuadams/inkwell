@@ -7,7 +7,7 @@ import {
   newBilling,
   newUsage,
   parseSubscription,
-  planFromPrice,
+  planFromProduct,
   recordUsage,
   retentionCutoff,
   shouldApply,
@@ -16,7 +16,7 @@ import {
   type Billing,
 } from '../src/lib/plans';
 
-const ENV = { STRIPE_PRICE_STARTER: 'price_s', STRIPE_PRICE_PLUS: 'price_p', STRIPE_PRICE_PRO: 'price_x', FREE_PAGES: '3' };
+const ENV = { STRIPE_PRODUCT_STARTER: 'prod_s', STRIPE_PRODUCT_PLUS: 'prod_p', STRIPE_PRODUCT_PRO: 'prod_x', FREE_PAGES: '3' };
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-09-20T12:00:00Z');
 const paid = (plan: Billing['plan'], extra: Partial<Billing> = {}): Billing => ({
@@ -82,14 +82,19 @@ describe('plans and quotas', () => {
 describe('Stripe subscription sync', () => {
   const stripeSub = (over: Record<string, unknown> = {}) => ({
     id: 'sub_1', status: 'active', customer: 'cus_1', cancel_at_period_end: false,
-    items: { data: [{ price: { id: 'price_p' }, current_period_start: 1000, current_period_end: 2000 }] },
+    items: { data: [{ price: { id: 'price_1', product: 'prod_p' }, current_period_start: 1000, current_period_end: 2000 }] },
     ...over,
   });
 
-  it('maps prices to plans', () => {
-    expect(planFromPrice('price_x', ENV)).toBe('pro');
-    expect(planFromPrice('price_unknown', ENV)).toBeNull();
-    expect(planFromPrice(undefined, ENV)).toBeNull();
+  it('maps products to plans', () => {
+    expect(planFromProduct('prod_x', ENV)).toBe('pro');
+    expect(planFromProduct('prod_unknown', ENV)).toBeNull();
+    expect(planFromProduct(undefined, ENV)).toBeNull();
+  });
+
+  it('accepts an expanded product object', () => {
+    const sub = stripeSub({ items: { data: [{ price: { id: 'price_1', product: { id: 'prod_x' } } }] } });
+    expect(parseSubscription(sub, ENV).plan).toBe('pro');
   });
 
   it('reads period dates from items or the top level', () => {

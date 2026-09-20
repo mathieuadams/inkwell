@@ -5,7 +5,7 @@
  */
 import { handle, HttpError, json, parseBody, userId, type ApiEvent } from '../lib/http';
 import { getBilling, getUsage, saveBilling } from '../lib/account';
-import { isActiveStatus, isPaidPlan, priceEnvName, summary } from '../lib/plans';
+import { isActiveStatus, isPaidPlan, productEnvName, summary, type PaidPlan } from '../lib/plans';
 import { stripe } from '../lib/stripe';
 
 const LOCAL_ORIGIN = 'http://localhost:5173';
@@ -15,6 +15,27 @@ function returnOrigin(event: ApiEvent): string {
   const site = process.env.SITE_URL ?? '';
   const origin = event.headers?.origin;
   return origin && [site, LOCAL_ORIGIN].includes(origin) ? origin : site;
+}
+
+const priceCache = new Map<PaidPlan, string>();
+
+/** The monthly price is the product's default price in Stripe. */
+async function priceFor(plan: PaidPlan): Promise<string> {
+  const cached = priceCache.get(plan);
+  if (cached) return cached;
+  const productId = process.env[productEnvName(plan)];
+  if (!productId) throw new HttpError(503, "Billing isn't set up yet. Try again later.");
+  const product = await stripe<{ default_price?: string | { id: string } | null; active: boolean }>(
+    'GET',
+    `/v1/products/${encodeURIComponent(productId)}`,
+  );
+  const price = typeof product.default_price === 'string' ? product.default_price : product.default_price?.id;
+  if (!price || !product.active) {
+    console.error('Stripe product has no active default price', plan, productId);
+    throw new HttpError(503, "Billing isn't set up yet. Try again later.");
+  }
+  priceCache.set(plan, price);
+  return price;
 }
 
 async function portalUrl(customerId: string, origin: string): Promise<string> {
@@ -36,8 +57,6 @@ export const handler = handle(async (event) => {
     case 'POST /billing/checkout': {
       const { plan } = parseBody<{ plan: string }>(event);
       if (!isPaidPlan(plan)) throw new HttpError(400, 'Choose Starter, Plus or Pro.');
-      const price = process.env[priceEnvName(plan)];
-      if (!price) throw new HttpError(503, "Billing isn't set up yet. Try again later.");
       const origin = returnOrigin(event);
 
       // Already subscribed: plan changes go through the portal so Stripe prorates correctly.
@@ -45,6 +64,7 @@ export const handler = handle(async (event) => {
         return json(200, { url: await portalUrl(billing.customerId, origin) });
       }
 
+      const price = await priceFor(plan);
       let customerId = billing.customerId;
       if (!customerId) {
         const customer = await stripe<{ id: string }>('POST', '/v1/customers', { metadata: { sub } });

@@ -52,7 +52,7 @@ export const newUsage = (): Usage => ({ freePages: 0, freeTranslations: 0, pages
 
 export const isPaidPlan = (v: unknown): v is PaidPlan => typeof v === 'string' && (PAID_PLANS as string[]).includes(v);
 export const isActiveStatus = (status: string | undefined) => ACTIVE_STATUSES.has(status ?? '');
-export const priceEnvName = (plan: PaidPlan) => `STRIPE_PRICE_${plan.toUpperCase()}`;
+export const productEnvName = (plan: PaidPlan) => `STRIPE_PRODUCT_${plan.toUpperCase()}`;
 
 export function effectivePlan(b: Billing): Plan {
   return b.plan !== 'free' && isActiveStatus(b.status) ? b.plan : 'free';
@@ -134,22 +134,23 @@ export function summary(b: Billing, u: Usage, env: Env = process.env) {
     storesNotes: storesNotes(b),
     retentionDays: RETENTION_DAYS[l.plan],
     hasSubscription: Boolean(b.subscriptionId) && isActiveStatus(b.status),
-    billingReady: PAID_PLANS.every((p) => Boolean(env[priceEnvName(p)])),
+    billingReady: PAID_PLANS.every((p) => Boolean(env[productEnvName(p)])),
   };
 }
 
-export function planFromPrice(priceId: string | undefined, env: Env = process.env): PaidPlan | null {
-  if (!priceId) return null;
-  return PAID_PLANS.find((p) => env[priceEnvName(p)] === priceId) ?? null;
+export function planFromProduct(productId: string | undefined, env: Env = process.env): PaidPlan | null {
+  if (!productId) return null;
+  return PAID_PLANS.find((p) => env[productEnvName(p)] === productId) ?? null;
 }
 
 /** Reads the fields we need from a Stripe subscription object (works across API versions). */
 export function parseSubscription(obj: any, env: Env = process.env): SubscriptionState {
   const item = obj?.items?.data?.[0];
+  const product = item?.price?.product;
   return {
     id: obj.id,
     status: obj.status,
-    plan: planFromPrice(item?.price?.id, env),
+    plan: planFromProduct(typeof product === 'string' ? product : product?.id, env),
     customerId: typeof obj.customer === 'string' ? obj.customer : obj.customer?.id,
     periodStart: obj.current_period_start ?? item?.current_period_start,
     periodEnd: obj.current_period_end ?? item?.current_period_end,

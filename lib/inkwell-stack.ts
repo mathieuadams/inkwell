@@ -23,8 +23,8 @@ export interface InkwellStackProps extends cdk.StackProps {
   extractModelId: string;
   /** Bedrock model or inference-profile id used to translate. */
   translateModelId: string;
-  /** Stripe price ids (price_...) for the monthly plans. Empty = billing disabled. */
-  stripePrices: { starter: string; plus: string; pro: string };
+  /** Stripe product ids (prod_...) for the monthly plans; each product's default price is used. Empty = billing disabled. */
+  stripeProducts: { starter: string; plus: string; pro: string };
   /** Pages a new account can convert before subscribing. */
   freePages: string;
 }
@@ -189,9 +189,9 @@ export class InkwellStack extends cdk.Stack {
           TRANSLATE_MODEL_ID: props.translateModelId,
           SITE_URL: siteUrl,
           FREE_PAGES: props.freePages,
-          STRIPE_PRICE_STARTER: props.stripePrices.starter,
-          STRIPE_PRICE_PLUS: props.stripePrices.plus,
-          STRIPE_PRICE_PRO: props.stripePrices.pro,
+          STRIPE_PRODUCT_STARTER: props.stripeProducts.starter,
+          STRIPE_PRODUCT_PLUS: props.stripeProducts.plus,
+          STRIPE_PRODUCT_PRO: props.stripeProducts.pro,
           STRIPE_SECRET_PARAM: `${stripeParamPrefix}/secret-key`,
           STRIPE_WEBHOOK_PARAM: `${stripeParamPrefix}/webhook-secret`,
           NODE_OPTIONS: '--enable-source-maps',

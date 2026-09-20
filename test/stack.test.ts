@@ -11,7 +11,7 @@ beforeAll(() => {
     stage: 'test',
     extractModelId: 'test-extract-model',
     translateModelId: 'test-translate-model',
-    stripePrices: { starter: 'price_s', plus: 'price_p', pro: 'price_x' },
+    stripeProducts: { starter: 'prod_s', plus: 'prod_p', pro: 'prod_x' },
     freePages: '3',
     env: { account: '123456789012', region: 'us-east-1' },
   });

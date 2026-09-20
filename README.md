@@ -104,14 +104,14 @@ Translations are capped at 5× the page quota. After a downgrade or cancellation
 
 Setup per stage (dev uses Stripe **test mode**, prod uses **live mode**):
 
-1. Stripe products with monthly prices, then GitHub variables `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PLUS`, `STRIPE_PRICE_PRO` (`price_...`). Optional `FREE_PAGES`.
+1. Stripe products, each with its monthly price as the default price, then GitHub variables `STRIPE_PRODUCT_STARTER`, `STRIPE_PRODUCT_PLUS`, `STRIPE_PRODUCT_PRO` (`prod_...`). Optional `FREE_PAGES`.
 2. Restricted key (Checkout Sessions W, Customers W, Customer portal W, Subscriptions R, Prices R, Products R) in SSM:
    `aws ssm put-parameter --name /inkwell/dev/stripe/secret-key --type SecureString --value rk_test_...`
 3. Deploy, then add a Stripe webhook to the `StripeWebhookUrl` output with events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, and store its signing secret:
    `aws ssm put-parameter --name /inkwell/dev/stripe/webhook-secret --type SecureString --value whsec_...`
 4. Stripe customer portal: enable plan switching (all three products) and cancellation.
 
-Prod uses the same parameter names under `/inkwell/prod/stripe/`. Separate GitHub environment variables can hold the live price IDs.
+Prod uses the same parameter names under `/inkwell/prod/stripe/`. Set the live product IDs as variables on the `prod` GitHub environment; they override the repo-level test ones.
 
 ## CI/CD
 
